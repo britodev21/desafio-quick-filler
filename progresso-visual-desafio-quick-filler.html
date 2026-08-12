@@ -1,0 +1,476 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel — desafio Quick Filler</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --navy:#173772;
+    --navy-soft:#2a4f96;
+    --ink:#15181c;
+    --ink-2:#4a5159;
+    --ink-3:#7c848d;
+    --paper:#eef0f3;
+    --card:#ffffff;
+    --rule:#d5dae1;
+    --warn-bg:#fff3cd;
+    --warn-ink:#7a5a00;
+    --err-bg:#f8d7da;
+    --err-line:#dc3545;
+    --err-ink:#8c1c26;
+    --ok:#1d7a5f;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    font-size:15px;
+    line-height:1.65;
+  }
+  .wrap{max-width:920px;margin:0 auto;padding:0 20px 72px}
+
+  /* ---------- cabeçalho ---------- */
+  header{
+    background:var(--navy);
+    color:#fff;
+    margin-bottom:28px;
+  }
+  .head-in{max-width:920px;margin:0 auto;padding:34px 20px 30px;
+    display:flex;gap:24px;align-items:center;flex-wrap:wrap}
+  .head-txt{flex:1;min-width:240px}
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:#9db4dd;margin:0 0 6px;
+  }
+  h1{
+    font-family:"IBM Plex Sans Condensed",sans-serif;
+    font-weight:700;font-size:34px;line-height:1.1;margin:0 0 8px;
+    letter-spacing:-.01em;
+  }
+  .head-sub{margin:0;color:#c2d2ea;font-size:14px}
+  .head-sub b{color:#fff;font-weight:600}
+
+  /* anel de progresso */
+  .ring-box{display:flex;align-items:center;gap:14px}
+  .ring{width:78px;height:78px;flex:none}
+  .ring circle{fill:none;stroke-width:7}
+  .ring .bg{stroke:rgba(255,255,255,.22)}
+  .ring .fg{stroke:#ffd166;stroke-linecap:round;
+    transform:rotate(-90deg);transform-origin:50% 50%;
+    transition:stroke-dasharray .5s ease}
+  .ring-num{
+    font-family:"IBM Plex Mono",monospace;font-size:19px;font-weight:600;
+    fill:#fff;
+  }
+  .ring-lbl{font-family:"IBM Plex Mono",monospace;font-size:11px;
+    letter-spacing:.1em;text-transform:uppercase;color:#9db4dd;max-width:96px}
+
+  /* ---------- abas ---------- */
+  nav{
+    display:flex;gap:2px;flex-wrap:wrap;
+    border-bottom:2px solid var(--rule);margin-bottom:26px;
+  }
+  .tab{
+    appearance:none;border:0;background:none;cursor:pointer;
+    font-family:"IBM Plex Sans Condensed",sans-serif;
+    font-weight:600;font-size:15px;color:var(--ink-2);
+    padding:11px 15px;border-bottom:2px solid transparent;
+    margin-bottom:-2px;transition:color .15s,border-color .15s;
+  }
+  .tab:hover{color:var(--navy)}
+  .tab[aria-selected="true"]{color:var(--navy);border-bottom-color:var(--navy)}
+  .tab:focus-visible{outline:2px solid var(--navy);outline-offset:2px;border-radius:3px}
+  .panel[hidden]{display:none}
+
+  h2{
+    font-family:"IBM Plex Sans Condensed",sans-serif;
+    font-weight:700;font-size:21px;margin:34px 0 4px;letter-spacing:-.005em;
+  }
+  h2:first-of-type{margin-top:0}
+  .lede{color:var(--ink-2);margin:0 0 18px;font-size:14.5px;max-width:62ch}
+
+  /* ---------- rotas ---------- */
+  .route{
+    background:var(--card);border:1px solid var(--rule);border-radius:6px;
+    margin-bottom:12px;overflow:hidden;
+  }
+  .route summary{
+    cursor:pointer;list-style:none;padding:14px 16px;
+    display:flex;gap:11px;align-items:center;flex-wrap:wrap;
+  }
+  .route summary::-webkit-details-marker{display:none}
+  .route summary:focus-visible{outline:2px solid var(--navy);outline-offset:-2px}
+  .verb{
+    font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;
+    letter-spacing:.06em;padding:3px 8px;border-radius:3px;flex:none;
+    background:var(--navy);color:#fff;
+  }
+  .verb.get{background:#e3e8f1;color:var(--navy)}
+  .verb.put{background:#fff3cd;color:var(--warn-ink)}
+  .path{font-family:"IBM Plex Mono",monospace;font-size:13.5px;font-weight:500;flex:1;min-width:180px}
+  .note{font-size:12.5px;color:var(--ink-3);font-family:"IBM Plex Sans Condensed",sans-serif}
+  .route-body{padding:2px 16px 18px;border-top:1px solid var(--rule)}
+  .route-body p{margin:14px 0 8px;font-size:14.5px;max-width:64ch}
+
+  pre{
+    background:#f7f8fa;border:1px solid var(--rule);border-left:3px solid var(--navy);
+    border-radius:0 4px 4px 0;padding:12px 14px;margin:10px 0 0;
+    font-family:"IBM Plex Mono",monospace;font-size:12.5px;line-height:1.6;
+    overflow-x:auto;color:var(--ink);
+  }
+  code{font-family:"IBM Plex Mono",monospace;font-size:.9em;
+    background:#e6e9ee;padding:1px 5px;border-radius:3px}
+  pre code{background:none;padding:0;font-size:inherit}
+
+  /* ---------- listas de regra ---------- */
+  .rules{list-style:none;padding:0;margin:0}
+  .rules li{
+    background:var(--card);border:1px solid var(--rule);border-radius:6px;
+    padding:13px 16px;margin-bottom:8px;font-size:14.5px;
+  }
+  .rules li b{font-weight:600}
+  .rules li span{display:block;color:var(--ink-2);font-size:13.5px;margin-top:3px}
+  .rules.danger li{background:var(--err-bg);border-color:#eec2c6;
+    border-left:3px solid var(--err-line);border-radius:0 6px 6px 0}
+  .rules.danger li b{color:var(--err-ink)}
+  .rules.danger li span{color:#7a3138}
+
+  /* ---------- checklist dos dias ---------- */
+  .day{
+    background:var(--card);border:1px solid var(--rule);border-radius:6px;
+    margin-bottom:10px;
+  }
+  .day-head{
+    display:flex;align-items:baseline;gap:10px;padding:13px 16px 4px;flex-wrap:wrap;
+  }
+  .day-n{
+    font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;
+    color:var(--navy);letter-spacing:.1em;text-transform:uppercase;
+  }
+  .day-t{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:600;font-size:16px}
+  .day-tag{font-size:12px;color:var(--ink-3);margin-left:auto;
+    font-family:"IBM Plex Mono",monospace}
+  .day ul{list-style:none;margin:0;padding:2px 16px 14px}
+  .day li{margin:0}
+  .day label{
+    display:flex;gap:10px;align-items:flex-start;padding:5px 0;
+    cursor:pointer;font-size:14px;color:var(--ink-2);
+  }
+  .day input{
+    appearance:none;width:16px;height:16px;flex:none;margin-top:3px;
+    border:1.5px solid #a8b0ba;border-radius:3px;background:#fff;cursor:pointer;
+    position:relative;transition:background .12s,border-color .12s;
+  }
+  .day input:checked{background:var(--ok);border-color:var(--ok)}
+  .day input:checked::after{
+    content:"";position:absolute;left:4.5px;top:1px;width:4px;height:9px;
+    border:solid #fff;border-width:0 2px 2px 0;transform:rotate(42deg);
+  }
+  .day input:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
+  .day input:checked + span{color:var(--ink-3);text-decoration:line-through}
+
+  /* ---------- pesos ---------- */
+  .weights{margin:0;padding:0;list-style:none}
+  .weights li{margin-bottom:11px}
+  .w-top{display:flex;justify-content:space-between;align-items:baseline;
+    font-size:14.5px;margin-bottom:4px}
+  .w-top b{font-weight:600}
+  .w-top i{font-style:normal;font-family:"IBM Plex Mono",monospace;
+    font-size:13px;color:var(--navy);font-weight:600}
+  .bar{height:7px;background:#dde2e9;border-radius:4px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--navy);border-radius:4px}
+
+  .callout{
+    background:var(--warn-bg);border-left:3px solid #d9a900;
+    padding:13px 16px;margin:18px 0 0;font-size:14px;color:var(--warn-ink);
+    border-radius:0 4px 4px 0;
+  }
+  .callout b{font-weight:600}
+
+  footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--rule);
+    font-size:12.5px;color:var(--ink-3);display:flex;justify-content:space-between;
+    gap:14px;flex-wrap:wrap;align-items:center}
+  .reset{appearance:none;border:1px solid var(--rule);background:var(--card);
+    color:var(--ink-2);font-family:inherit;font-size:12.5px;padding:5px 11px;
+    border-radius:4px;cursor:pointer}
+  .reset:hover{border-color:#b9c0c9;color:var(--ink)}
+
+  @media (max-width:560px){
+    h1{font-size:27px}
+    .head-in{padding:26px 20px 24px}
+    .tab{font-size:14px;padding:10px 11px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<header>
+  <div class="head-in">
+    <div class="head-txt">
+      <p class="eyebrow">Desafio técnico · entrega 19/08</p>
+      <h1>Transcrição de documentos trabalhistas</h1>
+      <p class="head-sub">Um pipeline, dois extratores. <b>Cartão de ponto</b> e <b>holerite</b> compartilham envio, processamento, revisão e download.</p>
+    </div>
+    <div class="ring-box">
+      <svg class="ring" viewBox="0 0 80 80" aria-hidden="true">
+        <circle class="bg" cx="40" cy="40" r="33"></circle>
+        <circle class="fg" id="ring-fg" cx="40" cy="40" r="33" stroke-dasharray="0 207"></circle>
+        <text class="ring-num" id="ring-num" x="40" y="46" text-anchor="middle">0%</text>
+      </svg>
+      <span class="ring-lbl" id="ring-lbl">0 de 0 tarefas</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav role="tablist" aria-label="Seções do painel">
+    <button class="tab" role="tab" aria-selected="true" aria-controls="p-rotas" id="t-rotas">Rotas</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="p-contrato" id="t-contrato">Contrato</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="p-dias" id="t-dias">Os 8 dias</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="p-armadilhas" id="t-armadilhas">Armadilhas</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="p-nota" id="t-nota">Nota</button>
+  </nav>
+
+  <!-- ============ ROTAS ============ -->
+  <section class="panel" role="tabpanel" id="p-rotas" aria-labelledby="t-rotas">
+    <h2>As cinco rotas</h2>
+    <p class="lede">O contrato é literal. Um nome de campo diferente, um status escrito de outro jeito, e a avaliação automática não reconhece a resposta. Clique em cada rota para ver o formato exato.</p>
+
+    <details class="route" open>
+      <summary><span class="verb">POST</span><span class="path">/api/transcricoes</span><span class="note">recebe o PDF</span></summary>
+      <div class="route-body">
+        <p>Recebe <code>multipart/form-data</code> com dois campos: <code>arquivo</code> (o PDF) e <code>tipo</code>, que só aceita <code>cartao-ponto</code> ou <code>holerite</code> — com hífen, sem acento.</p>
+        <p>Responde <b>202</b> imediatamente com o id, e o processamento continua por trás. Processar dentro do request quebra em produção quando o proxy da plataforma corta a conexão.</p>
+        <pre><code>HTTP/1.1 202 Accepted
+
+{ "id": "abc123" }</code></pre>
+      </div>
+    </details>
+
+    <details class="route">
+      <summary><span class="verb get">GET</span><span class="path">/api/transcricoes/:id</span><span class="note">consulta o andamento</span></summary>
+      <div class="route-body">
+        <p>É por aqui que a tela descobre que o trabalho acabou. Enquanto <code>status</code> for <code>processando</code>, o campo <code>value</code> vem <code>null</code>. Em <code>erro</code>, o campo <code>erro</code> traz mensagem legível.</p>
+        <pre><code>{
+  "id": "abc123",
+  "tipo": "cartao-ponto",
+  "status": "concluido",
+  "erro": null,
+  "value": { "pages": [ ... ] }
+}</code></pre>
+      </div>
+    </details>
+
+    <details class="route">
+      <summary><span class="verb put">PUT</span><span class="path">/api/transcricoes/:id</span><span class="note">salva as correções</span></summary>
+      <div class="route-body">
+        <p>Recebe <code>{ "value": { ... } }</code> com o que a pessoa corrigiu na tela e <b>substitui</b> a transcrição inteira. É o que faz a correção chegar na planilha.</p>
+      </div>
+    </details>
+
+    <details class="route">
+      <summary><span class="verb get">GET</span><span class="path">/api/transcricoes/:id/planilha</span><span class="note">baixa o resultado</span></summary>
+      <div class="route-body">
+        <p>Aceita <code>?formato=xlsx</code>, <code>csv</code> ou <code>json</code>. Os três precisam funcionar — implementar só o xlsx está na lista de erros que já derrubaram entregas.</p>
+        <p>A planilha sai com as correções já aplicadas, não com a transcrição original.</p>
+      </div>
+    </details>
+
+    <details class="route">
+      <summary><span class="verb get">GET</span><span class="path">/healthz</span><span class="note">a aplicação está de pé?</span></summary>
+      <div class="route-body">
+        <p>Responde <b>200</b> quando a aplicação está viva. É o que a plataforma de deploy usa pra saber se o container subiu.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ CONTRATO ============ -->
+  <section class="panel" role="tabpanel" id="p-contrato" aria-labelledby="t-contrato" hidden>
+    <h2>Regras que não se negocia</h2>
+    <p class="lede">Estas valem para os dois tipos de documento e não dependem de qualidade de leitura. São erro de contrato, não de extração.</p>
+    <ul class="rules">
+      <li><b>Nunca invente um valor</b><span>Caractere que não deu para ler vira <code>?</code>. A incerteza é por caractere, não por linha.</span></li>
+      <li><b>Nunca produza data impossível</b><span>Dia 38 ou mês 13 é erro de leitura, não uma data.</span></li>
+      <li><b>Dinheiro é string, no formato brasileiro</b><span><code>"2.389,77"</code> — nunca <code>2389.77</code>. Float perde o formato e introduz arredondamento.</span></li>
+      <li><b>Guarde o original e o interpretado</b><span><code>date_raw</code> e <code>time_raw</code> preservam o que estava impresso; <code>time_hhmm</code> traz o normalizado.</span></li>
+      <li><b>Não ordene as linhas</b><span>A saída segue a ordem do documento. Ordenar esconde justamente o sinal que a marcação de "não sequencial" existe para revelar.</span></li>
+      <li><b>Os avisos são derivados</b><span>Batidas ímpares, data não sequencial, página vazia e mês não sequencial saem do próprio dado na hora de exibir. Nenhum deles é campo no JSON.</span></li>
+      <li><b><code>fields</code> e <code>bases</code> são coisas separadas</b><span>Base INSS, Total Vencimentos e Valor Líquido não são verbas. Se entrarem em <code>fields</code>, viram colunas e contaminam a planilha inteira.</span></li>
+      <li><b>Nenhuma linha some em silêncio</b><span>Dia sem batida é <code>punches: []</code>, não ausência. Página de holerite sem dados continua na saída, marcada como vazia.</span></li>
+    </ul>
+
+    <h2>Cores da planilha</h2>
+    <p class="lede">Especificadas literalmente no enunciado, e as mesmas na tela de revisão.</p>
+    <ul class="rules">
+      <li><b>Cabeçalho</b><span>Negrito branco sobre <code>#173772</code>.</span></li>
+      <li><b>Batidas ímpares, página vazia, ou <code>?</code> na linha</b><span>Preenchimento <code>#FFF3CD</code>.</span></li>
+      <li><b>Data ou mês não sequencial</b><span>Preenchimento <code>#F8D7DA</code>, com borda esquerda <code>#DC3545</code> na primeira célula. Quando as duas valem, vermelho ganha.</span></li>
+    </ul>
+  </section>
+
+  <!-- ============ DIAS ============ -->
+  <section class="panel" role="tabpanel" id="p-dias" aria-labelledby="t-dias" hidden>
+    <h2>Plano de trabalho</h2>
+    <p class="lede">O esqueleto anda primeiro; a inteligência vem depois. O ciclo completo vale 20% e fica garantido cedo — se a semana apertar, ainda existe entrega válida. Marque conforme for concluindo.</p>
+    <div id="dias"></div>
+    <div class="callout"><b>Se estourar o tempo, corte profundidade de um tipo de documento — nunca o ciclo.</b> Os dois tipos lidos parcialmente com o fluxo inteiro funcionando valem mais que um tipo perfeito sem interface e sem deploy. E escreva no <code>SOLUCAO.md</code> o que cortou e por quê: decidir o que sacrificar sob prazo é parte do que eles avaliam.</div>
+  </section>
+
+  <!-- ============ ARMADILHAS ============ -->
+  <section class="panel" role="tabpanel" id="p-armadilhas" aria-labelledby="t-armadilhas" hidden>
+    <h2>O que já derrubou entregas boas</h2>
+    <p class="lede">Lista do próprio <code>INSTRUCOES.md</code>. Não é advertência genérica — é a régua de correção escrita em texto.</p>
+    <ul class="rules danger">
+      <li><b>Duas aplicações em vez de uma</b><span>Os dois tipos compartilham envio, fila, revisão, edição e download. Duplicar custa metade do tempo e aparece na nota de arquitetura.</span></li>
+      <li><b>Processar dentro do request HTTP</b><span>Funciona local e quebra em produção. Pense em como o cliente descobre que o trabalho acabou.</span></li>
+      <li><b>Coordenadas fixas</b><span>Amarrar a leitura a posições x/y quebra na primeira variação de layout, inclusive entre páginas do mesmo documento. Localize as colunas pelo cabeçalho.</span></li>
+      <li><b>Ajustar o código ao PDF de exemplo</b><span>Uma data, um nome de coluna ou um número de páginas gravado no código resolve o exemplo e quebra em qualquer outro documento.</span></li>
+      <li><b>Assumir que todo PDF tem camada de texto</b><span>Detecte e caia para OCR em vez de devolver transcrição em branco.</span></li>
+      <li><b>Aceitar qualquer coisa no upload</b><span>Um <code>.txt</code> renomeado para <code>.pdf</code> não vira transcrição. Recusar com 4xx é o ideal.</span></li>
+      <li><b>Implementar só o xlsx</b><span>O contrato pede os três formatos, e os três precisam funcionar.</span></li>
+      <li><b>Deploy que não sobe</b><span>Teste a URL numa janela anônima antes de mandar.</span></li>
+    </ul>
+  </section>
+
+  <!-- ============ NOTA ============ -->
+  <section class="panel" role="tabpanel" id="p-nota" aria-labelledby="t-nota" hidden>
+    <h2>Como pontua</h2>
+    <p class="lede">Precisão é a maior fatia sozinha, mas ciclo, arquitetura, segurança e documentação somam 55%. Volume de código, número de testes e tamanho do README não somam nada.</p>
+    <ul class="weights">
+      <li><div class="w-top"><b>Precisão da extração</b><i>30%</i></div><div class="bar"><i style="width:100%"></i></div></li>
+      <li><div class="w-top"><b>O ciclo completo funciona</b><i>20%</i></div><div class="bar"><i style="width:66%"></i></div></li>
+      <li><div class="w-top"><b>Honestidade dos dados</b><i>15%</i></div><div class="bar"><i style="width:50%"></i></div></li>
+      <li><div class="w-top"><b>Arquitetura e operação</b><i>15%</i></div><div class="bar"><i style="width:50%"></i></div></li>
+      <li><div class="w-top"><b>Segurança e privacidade</b><i>10%</i></div><div class="bar"><i style="width:33%"></i></div></li>
+      <li><div class="w-top"><b>Código e decisões</b><i>10%</i></div><div class="bar"><i style="width:33%"></i></div></li>
+    </ul>
+    <div class="callout"><b>Honestidade dos dados é o critério que mais gente subestima.</b> Um caractere marcado como <code>?</code> custa muito menos que um caractere errado com cara de certo — o primeiro é visto e corrigido na revisão, o segundo chega ao cliente. Mas encher a saída de <code>?</code> para se proteger também não funciona: quem diz que não leu nada, não transcreveu nada. O que eles querem ver é calibração.</div>
+
+    <h2>Depois da entrega</h2>
+    <p class="lede">Quem avançar faz uma sessão de ~40 minutos, ao vivo, estendendo a própria solução para um layout novo — com agente liberado. É por isso que entender o que você entregou vale mais do que entregar mais.</p>
+  </section>
+
+  <footer>
+    <span>Painel de referência · construído a partir do <code>README.md</code> e do <code>INSTRUCOES.md</code> do desafio</span>
+    <button class="reset" id="reset">Limpar marcações</button>
+  </footer>
+</div>
+
+<script>
+const DIAS = [
+  {n:"Dia 1", t:"Reconhecimento", tag:"~2h", itens:[
+    "Estrutura do repositório, .gitignore e venv",
+    "Mapear quais PDFs têm camada de texto",
+    "Ver como o texto sai na prática e anotar as exceções"]},
+  {n:"Dia 2", t:"Esqueleto no ar", tag:"~3h", itens:[
+    "As cinco rotas respondendo com JSON fixo",
+    "Processamento em background, fora do request",
+    "Deploy funcionando e /healthz respondendo"]},
+  {n:"Dia 3", t:"Cartão de ponto", tag:"~3h", itens:[
+    "Extração no arquivo com texto limpo",
+    "Localizar as colunas pelo cabeçalho",
+    "Dia sem batida vira punches vazio, não some",
+    "Decidir o que fazer com o dia repetido"]},
+  {n:"Dia 4", t:"OCR e holerite", tag:"~3h", itens:[
+    "Detectar página sem texto e cair para OCR",
+    "Marcar ? usando a confiança do Tesseract",
+    "Holerite: separar fields de bases"]},
+  {n:"Dia 5", t:"Planilhas", tag:"~2h", itens:[
+    "xlsx com as cores exatas do enunciado",
+    "csv e json funcionando também",
+    "Transposição do holerite: lista vertical vira matriz larga"]},
+  {n:"Dia 6", t:"Interface", tag:"~4h", itens:[
+    "Envio com escolha do tipo e feedback de progresso",
+    "Tabela editável seguindo as colunas da planilha",
+    "PDF visível ao lado da tabela",
+    "Os quatro avisos destacados, com motivo legível",
+    "Download refletindo as edições"]},
+  {n:"Dia 7", t:"Docker e segurança", tag:"~2h", itens:[
+    "docker compose up sobe tudo",
+    "Limite de tamanho e validação de que é PDF mesmo",
+    "Comportamento definido para arquivo corrompido",
+    "Sem PII nos logs",
+    "CI mínima com lint e testes"]},
+  {n:"Dia 8", t:"Documentação e revisão", tag:"~2h", itens:[
+    "SOLUCAO.md: como rodar, decisões, o que ficou de fora",
+    "PROCESSO.md: uso de IA e as três perguntas",
+    "Gerar as planilhas dos PDFs de exemplo",
+    "Conferir o contrato campo por campo",
+    "Testar a URL em janela anônima"]}
+];
+
+const KEY = "quickfiller-roadmap-v1";
+let estado = {};
+
+const cont = document.getElementById("dias");
+DIAS.forEach((d, di) => {
+  const box = document.createElement("div");
+  box.className = "day";
+  const itens = d.itens.map((txt, ii) =>
+    `<li><label><input type="checkbox" data-id="${di}-${ii}"><span>${txt}</span></label></li>`
+  ).join("");
+  box.innerHTML =
+    `<div class="day-head"><span class="day-n">${d.n}</span>` +
+    `<span class="day-t">${d.t}</span><span class="day-tag">${d.tag}</span></div>` +
+    `<ul>${itens}</ul>`;
+  cont.appendChild(box);
+});
+
+const caixas = () => document.querySelectorAll('#dias input[type="checkbox"]');
+
+function pintarAnel(){
+  const todas = caixas();
+  const feitas = [...todas].filter(c => c.checked).length;
+  const pct = todas.length ? Math.round(feitas / todas.length * 100) : 0;
+  const volta = 2 * Math.PI * 33;
+  document.getElementById("ring-fg")
+    .setAttribute("stroke-dasharray", `${volta * pct / 100} ${volta}`);
+  document.getElementById("ring-num").textContent = pct + "%";
+  document.getElementById("ring-lbl").textContent =
+    `${feitas} de ${todas.length} tarefas`;
+}
+
+async function salvar(){
+  estado = {};
+  caixas().forEach(c => { if (c.checked) estado[c.dataset.id] = 1; });
+  try { await window.storage.set(KEY, JSON.stringify(estado)); }
+  catch (e) { console.warn("não deu pra salvar", e); }
+}
+
+async function carregar(){
+  try {
+    const r = await window.storage.get(KEY);
+    if (r && r.value) estado = JSON.parse(r.value);
+  } catch (e) { estado = {}; }
+  caixas().forEach(c => { c.checked = !!estado[c.dataset.id]; });
+  pintarAnel();
+}
+
+cont.addEventListener("change", e => {
+  if (e.target.type === "checkbox") { pintarAnel(); salvar(); }
+});
+
+document.getElementById("reset").addEventListener("click", () => {
+  caixas().forEach(c => c.checked = false);
+  pintarAnel(); salvar();
+});
+
+const abas = document.querySelectorAll('.tab');
+abas.forEach(aba => {
+  aba.addEventListener("click", () => {
+    abas.forEach(o => {
+      const sel = o === aba;
+      o.setAttribute("aria-selected", sel);
+      document.getElementById(o.getAttribute("aria-controls")).hidden = !sel;
+    });
+  });
+});
+
+pintarAnel();
+carregar();
+</script>

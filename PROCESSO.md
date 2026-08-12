@@ -46,3 +46,5 @@ Ainda não decidi o que fazer com 1, 2 e 4 — decidir no dia 3.
 - Extrator primeiro com texto limpo, OCR depois. (revisar essa explicação no dia 4)
 - A detecção "tem texto ou não" fica no caminho comum, antes de separar por tipo de documento (vale pro holerite também).
 
+### Dia 2 — 12/08
+
