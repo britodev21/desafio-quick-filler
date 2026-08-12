@@ -25,3 +25,9 @@ def put_transcricao(id: str, correcao: Correcao):
     return {"id": id,
             "recebido": correcao.value
 }
+
+@app.get("/api/transcricoes/{id}/planilha")
+def get_planilha(id: str, formato: str = "xlsx"):
+    return {"id": id,
+            "planilha": f"planilha.{formato}"
+}
