@@ -11,6 +11,8 @@
 - Claude Code (Integrado na IDE): planejamento, decisões de arquitetura, dúvidas conceituais
 - Claude (chat): planejamento, arquitetura e dúvidas
 - FastAPI
+- uvicorn
+- python-multipart
 - pdfplumber
 
 
@@ -49,13 +51,16 @@ Ainda não decidi o que fazer com 1, 2 e 4 — decidir no dia 3.
 ### Dia 2 — 12/08
 
 **O que fiz**
-- 
-- 
-- 
+- Rotas criadas com  o fastapi
+- uvicorn fica ligado atendendo requisições
+- Importei o python-multipart permite que o fastapi aceite upload de arquivos
+- Usei pip freeze para instalar requeriments.txt. A plataforma de deploy nao tem nada instalado, ela lê o arquivo e vai sabe quais as dependencias instalar
+- /healthz criado para confirmar que o sistema está vivo, health check que o render usa
+- Utilizei o /docs para testar es requisições e ver como a API me respondia
 
 **Decisões**
-- Deploy antes da extração porque: 
-- Guardar em memória em vez de banco porque: 
+- Deploy antes da extração porque: Problema de deploy com apenas as 5 rotas no sistema fica fácil de achar, onde ficaria mais complicado se eu fizesse apenas no dia 7, como está planejado no documento progresso-visual-desafio-quick-filler.html, documento criado apenas para melhor organização pessoal.
+- Guardar em memória em vez de banco porque: Criar banco para esse projeto seria apenas gastar tempo. O projeto não é uma corrida contra o tempo mas o banco tambem não é um obrigatoriedade, sendo assim, buscando focar no que é mais importante, decidi deixar tudo em memória
 - 
 
 **O que ficou faltando**
@@ -65,4 +70,17 @@ Ainda não decidi o que fazer com 1, 2 e 4 — decidir no dia 3.
 - Nada processa de verdade — falta o BackgroundTasks
 
 **Onde travei**
--
+- Troquei o value de str pra dict e fui testar se a API recusava o formato errado. Deu 200 e achei que a validação estava quebrada. Reiniciei o servidor, conferi o código, não achei nada. Aí percebi que o problema era o meu teste: eu estava mandando um objeto com texto dentro, e achando que estava mandando texto. Quando mandei texto de verdade, deu 422. A validação sempre funcionou
+
+
+
+
+## Cite 3 decisões em que havia mais de uma resposta razoável. Por que escolheu essa?
+
+
+
+## O que na sua solução quebra primeiro em produção?
+
+
+
+## Onde você não confia no que entregou?
