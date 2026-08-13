@@ -48,3 +48,21 @@ Ainda não decidi o que fazer com 1, 2 e 4 — decidir no dia 3.
 
 ### Dia 2 — 12/08
 
+**O que fiz**
+- 
+- 
+- 
+
+**Decisões**
+- Deploy antes da extração porque: 
+- Guardar em memória em vez de banco porque: 
+- 
+
+**O que ficou faltando**
+- PUT ainda não guarda a correção
+- Campo `tipo` aceita qualquer texto
+- Rota de planilha aceita qualquer formato
+- Nada processa de verdade — falta o BackgroundTasks
+
+**Onde travei**
+-
