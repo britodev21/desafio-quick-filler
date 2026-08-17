@@ -72,6 +72,29 @@ Ainda não decidi o que fazer com 1, 2 e 4 — decidir no dia 3.
 **Onde travei**
 - Troquei o value de str pra dict e fui testar se a API recusava o formato errado. Deu 200 e achei que a validação estava quebrada. Reiniciei o servidor, conferi o código, não achei nada. Aí percebi que o problema era o meu teste: eu estava mandando um objeto com texto dentro, e achando que estava mandando texto. Quando mandei texto de verdade, deu 422. A validação sempre funcionou
 
+### Dia 3 — 17/08
+
+**O que fiz**
+- Classificação das linhas do cartão de ponto em três tipos: início de dia, continuação e lixo
+- Extração das batidas, descartando a coluna Jornada e a coluna Qtde
+- Agrupamento das batidas por dia
+
+**Decisão: dia repetido (17 e 27)**
+- Dois dias repetem o número na linha de continuação em vez de omitir. Juntei as duas linhas num registro só. Isso contraria o "um item por linha" literal do contrato, mas se caso separarmos, o sistema dispara alarme falso de não-sequencial, e acaba representando o mesmo fato de duas formas dependendo de como o sistema imprimiu
+
+**Decisão: como separar batida de não-batida**
+- Todos os horários da linha têm o mesmo formato (HH:MM) — Jornada, batidas e Qtde. A distinção é por posição, não por formato.
+- Escolhi posição em vez de coordenada porque:  é mais rapido de escrever e funciona no documento que tenho. Caso contrátrio,exigiria aprender a trabalhar com coordenadas de PDF, que eu não conheço, e com o prazo preferi a solução que eu conseguia validar hoje.
+- Limitação conhecida: qualquer mudança na ordem das colunas quebra a leitura, porque a regra é posicional. Se algum dia, um PDF vier sem a coluna de jornada, teremos um descarte da primeira batida no ponto, resultando num dia com numero impar de batidas, por isso exite um detector de batidas.
+
+**Uso de IA**
+- Pedi ao agente a classificação das linhas. Ele entregou isso e mais uma decisão que eu não pedi: o tratamento do dia repetido. Percebi ao revisar e decidi manter porque: O dia 17 tem 4 batidas na realidade. Juntar produz isso. Separar produziria dois registros de 2, que não corresponde ao que aconteceu. Nenhum dado se perde, todas as batidas continuam lá, só agrupadas. Os avisos continuam funcionando. Se sobrar batida ímpar depois de juntar, o alerta dispara igual. Separar criaria data duplicada e alarme falso de "data não sequencial".
+- Ele também apontou um risco no dia 30 (um horário de batida com o mesmo valor de um horário de outra coluna). Conferi e não procede, a separação é por posição, não por valor, então valores iguais não se confundem.
+
+**Como validei**
+- Contei os dias novos: 31 num mês de 31 dias.
+- Defini critérios de acerto antes de rodar: dia 1 → 0 batidas, dia 2 → 4, dia 17 → 4. Os três passaram.
+- Nenhum dia saiu com número ímpar de batidas, que é o esperado já que batida vem em par entrada/saída.
 
 
 
