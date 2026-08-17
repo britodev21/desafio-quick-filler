@@ -1,6 +1,9 @@
 # Saídas geradas pela aplicação
 output/
 
+# PDFs enviados pela API em tempo de execução (documentos de terceiros)
+uploads/
+
 # Ferramentas internas de correção (não publicar)
 avaliacao/
 

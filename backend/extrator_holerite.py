@@ -1,5 +1,5 @@
-import json
 import re
+from itertools import pairwise
 
 import pdfplumber
 
@@ -250,42 +250,87 @@ def montar_json_pagina(classificadas, numero_pagina, year, month):
     }
 
 
-def processar_holerite(caminho_pdf, numero_pagina=1):
+def processar_pagina(texto_bruto, numero_pagina):
+    """
+    Trata UMA pagina de ponta a ponta, sem depender das outras.
+
+    Cada pagina do PDF e uma competencia fechada, com o proprio periodo no
+    topo e a propria tabela, entao ler o periodo, classificar e extrair tem
+    que acontecer dentro dela.
+
+    Devolve sempre o dict do contrato. Pagina sem tabela volta com fields e
+    bases vazios em vez de sumir da saida.
+    """
+    linhas = texto_bruto.split("\n")
+    year, month = extrair_periodo(linhas)
+    classificadas = classificar_linhas(linhas)
+
+    return montar_json_pagina(classificadas, numero_pagina, year, month)
+
+
+def competencia_da_pagina(pagina):
+    """Devolve "MM/AAAA", ou "??" quando a pagina nao trouxe periodo."""
+    if not pagina["year"] or not pagina["month"]:
+        return "??"
+
+    return f"{pagina['month']}/{pagina['year']}"
+
+
+def conferir_competencias_consecutivas(pages):
+    """
+    Diz se as competencias andam de mes em mes, sem pular nem repetir.
+
+    Compara em meses absolutos (ano * 12 + mes) porque a sequencia atravessa
+    a virada de ano: 12/2019 -> 01/2020 e consecutivo, e comparar so o numero
+    do mes acharia que voltou pra tras.
+    """
+    indices = [
+        int(p["year"]) * 12 + int(p["month"])
+        for p in pages
+        if p["year"] and p["month"]
+    ]
+
+    if len(indices) < 2:
+        return True, []
+
+    buracos = [(a, b) for a, b in pairwise(indices) if b - a != 1]
+
+    return not buracos, buracos
+
+
+def processar_holerite(caminho_pdf):
     print(f"iniciando a leitura de {caminho_pdf}...")
 
     with pdfplumber.open(caminho_pdf) as pdf:
-        print(f"-> O PDF tem {len(pdf.pages)} paginas.")
-        texto_bruto = pdf.pages[numero_pagina - 1].extract_text() or ""
+        textos = [pagina.extract_text() or "" for pagina in pdf.pages]
 
-    linhas = texto_bruto.split("\n")
-    year, month = extrair_periodo(linhas)
+    print(f"-> O PDF tem {len(textos)} paginas.\n")
 
-    print(f"-> Pagina {numero_pagina}, periodo: year={year!r} month={month!r}")
+    pages = []
 
-    classificadas = classificar_linhas(linhas)
+    for numero, texto_bruto in enumerate(textos, start=1):
+        pagina = processar_pagina(texto_bruto, numero)
+        pages.append(pagina)
 
-    contagem = {CABECALHO: 0, VERBA: 0, BASE: 0, LIXO: 0}
-    for tipo, _linha in classificadas:
-        contagem[tipo] += 1
+        print(
+            f"Pagina {numero}: competencia {competencia_da_pagina(pagina)}, "
+            f"{len(pagina['fields'])} fields, {len(pagina['bases'])} bases"
+        )
 
-    print("\n--- Contagem da classificacao ---")
-    print(f"Cabecalho: {contagem[CABECALHO]}")
-    print(f"Verbas   : {contagem[VERBA]}")
-    print(f"Bases    : {contagem[BASE]}")
-    print(f"Lixo     : {contagem[LIXO]}")
-    print(f"Total    : {len(classificadas)}")
+        if not pagina["fields"]:
+            print("  (sem tabela de verbas: entra na saida vazia)")
 
-    pagina = montar_json_pagina(classificadas, numero_pagina, year, month)
+    competencias = [competencia_da_pagina(p) for p in pages]
+    consecutivas, buracos = conferir_competencias_consecutivas(pages)
 
-    print(f"\n-> fields: {len(pagina['fields'])}, bases: {len(pagina['bases'])}")
+    print("\n--- Competencias ---")
+    print(" -> ".join(competencias))
+    print(f"Consecutivas: {'sim' if consecutivas else f'nao, {buracos}'}")
 
-    return pagina
+    return {"pages": pages}
 
 
 # Teste:
 if __name__ == "__main__":
     caminho_teste = "../exemplos/payroll-03.pdf"
     saida = processar_holerite(caminho_teste)
-
-    print("\n--- JSON da pagina 1 ---")
-    print(json.dumps(saida, indent=2, ensure_ascii=False))

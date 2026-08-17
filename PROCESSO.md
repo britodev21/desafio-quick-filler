@@ -142,6 +142,52 @@ Ainda não decidi o que fazer com 1, 2 e 4 — decidir no dia 3.
 **Como validei**
 - A soma dos 9 valores extraídos dá exatamente `1.967,07 + 859,46`, os dois valores da linha Total impressa. E `1.967,07 − 859,46` = `1.107,61`, o Líqüido impresso. Se algum valor tivesse sido lido errado ou trocado com a coluna Unidade, as duas contas não fechariam. É verificação independente do código, igual à do calendário no cartão de ponto.
 
+---
+
+## Ligação dos extratores na API
+
+**O que fiz**
+- POST grava o PDF em `uploads/{id}.pdf` e dispara o processamento via
+  `BackgroundTasks`
+- Função de processamento escolhe o extrator pelo `tipo`, guarda o resultado
+  em `value` e troca o status para `concluido`
+- Em caso de falha, status vira `erro` com mensagem genérica
+- Validação do `tipo` (400 se não for `cartao-ponto` ou `holerite`)
+- Validação de que o arquivo é PDF de verdade, pelos primeiros bytes (`%PDF`),
+  não pela extensão
+
+**Decisões**
+- A validação acontece antes da gravação, então upload recusado não deixa
+  arquivo pela metade em disco. Importa porque são documentos com CPF e salário.
+- O nome do arquivo salvo é o uuid que eu gero, nunca o nome que veio do
+  cliente. Um arquivo chamado `../../algo.pdf` não escapa do diretório.
+- Mensagem de erro genérica para o cliente; o traceback completo vai só para o
+  log do servidor. O cliente da API não precisa saber caminho de arquivo, e o
+  documento é de outra pessoa.
+- Um dicionário único (`EXTRATORES`) valida o tipo e escolhe o extrator, para
+  os dois não ficarem fora de sincronia.
+
+**Buraco encontrado nos testes (ainda aberto)**
+- Mandei `payroll-03.pdf` com `tipo=cartao-ponto`: um PDF válido, do tipo
+  errado. O resultado foi `status: concluido` com zero dias extraídos — o
+  extrator não acha o cabeçalho, devolve todas as páginas vazias, e a API diz
+  que deu certo.
+- É o "perder linhas em silêncio" na versão pior: some o documento inteiro.
+- Decisão pendente: tratar "nenhuma página com dado" como erro. Precisa
+  responder antes se um documento legitimamente vazio existe.
+
+**Pendências**
+- O PUT ainda não guarda a correção
+- Os `print` dos extratores vão para o log do servidor a cada upload:
+  barulhento e potencialmente vaza conteúdo de documento no log
+
+**Como validei**
+- Ciclo completo com os dois tipos: 202 → `processando` → `concluido` com
+  o JSON cheio
+- Tipo inválido → 400. Arquivo de texto renomeado para `.pdf` → 400
+- PDF corrompido → `status: erro`, mensagem genérica, `value: null`
+- Depois das rejeições, `uploads/` continuava vazio
+
 
 
 
