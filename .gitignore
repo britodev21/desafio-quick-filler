@@ -25,5 +25,8 @@ Thumbs.db
 .env
 .env.local
 
+# Organização pessoal
+progresso-visual-desafio-quick-filler.html
+
 # NOTA: os PDFs de `exemplos/` e as planilhas entregues devem ser
 # versionados. Não adicione `*.pdf` / `*.xlsx` aqui.
