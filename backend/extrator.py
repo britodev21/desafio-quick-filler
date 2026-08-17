@@ -1,3 +1,4 @@
+import json
 import re
 
 import pdfplumber
@@ -126,6 +127,54 @@ def agrupar_batidas_por_dia(classificadas):
     return dias
 
 
+def normalizar_hhmm(horario):
+    """
+    Normaliza o horario pra HH:MM com zero a esquerda ("9:03" -> "09:03").
+
+    Usa zfill em vez de int() de proposito: se um dia vier "?:25" de um
+    caractere ilegivel, sai "0?:25", que e o formato de incerteza do contrato,
+    em vez de estourar.
+    """
+    hora, _, minuto = horario.partition(":")
+    return f"{hora.zfill(2)}:{minuto}"
+
+
+def montar_punches(batidas):
+    """
+    Vira a lista de "HH:MM" em punches do contrato, alternando IN e OUT a
+    partir da primeira batida do dia.
+    """
+    punches = []
+
+    for posicao, horario in enumerate(batidas):
+        punches.append({
+            "kind": "IN" if posicao % 2 == 0 else "OUT",
+            "time_raw": horario,
+            "time_hhmm": normalizar_hhmm(horario),
+        })
+
+    return punches
+
+
+def montar_json_pagina(resultado):
+    """
+    Monta o {"page": N, "days": [...]} de uma pagina ja processada.
+
+    A data completa nunca aparece na linha do dia: a linha traz so "1 - DOM" e
+    o mes/ano fica no cabecalho da pagina. Por isso date_raw e montado juntando
+    os dois, com zero a esquerda no dia.
+    """
+    days = []
+
+    for registro in resultado["dias"]:
+        days.append({
+            "date_raw": f"{registro['dia']:02}/{resultado['mes_ano']}",
+            "punches": montar_punches(registro["batidas"]),
+        })
+
+    return {"page": resultado["pagina"], "days": days}
+
+
 def encontrar_inicio_tabela(linhas):
     """
     Devolve o indice do cabecalho da tabela, ou None se a pagina nao tiver.
@@ -193,16 +242,23 @@ def processar_cartao_ponto(caminho_pdf):
     print(f"-> O PDF tem {len(textos)} paginas.\n")
 
     paginas = []
+    pages = []
 
     for numero, texto_bruto in enumerate(textos, start=1):
         resultado = processar_pagina(texto_bruto)
 
         if resultado is None:
-            print(f"Pagina {numero}: nao achei o cabecalho da tabela, pulando.")
+            """
+            Pagina sem tabela nao pode sumir da saida: o contrato pede uma
+            entrada por pagina do PDF, vazia quando nao tem dado.
+            """
+            print(f"Pagina {numero}: nao achei o cabecalho da tabela.")
+            pages.append({"page": numero, "days": []})
             continue
 
         resultado["pagina"] = numero
         paginas.append(resultado)
+        pages.append(montar_json_pagina(resultado))
 
         impares = [
             d["dia"] for d in resultado["dias"] if len(d["batidas"]) % 2 != 0
@@ -230,10 +286,13 @@ def processar_cartao_ponto(caminho_pdf):
     print(f"Dias             : {total_dias}")
     print(f"Batidas          : {total_batidas}")
 
-    return paginas
+    return {"pages": pages}
 
 
 # Teste:
 if __name__ == "__main__":
     caminho_teste = "../exemplos/time-card-01.pdf"
-    processar_cartao_ponto(caminho_teste)
+    saida = processar_cartao_ponto(caminho_teste)
+
+    print("\n--- JSON da pagina 1 ---")
+    print(json.dumps(saida["pages"][0], indent=2, ensure_ascii=False))
