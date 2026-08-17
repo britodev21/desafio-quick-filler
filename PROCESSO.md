@@ -99,12 +99,20 @@ Ainda não decidi o que fazer com 1, 2 e 4 — decidir no dia 3.
 - Dia 29/10 tem batida ímpar: entrada sem saída. É dado real do PDF, não falha do extrator. Único caso em 153 dias.
 - Uma linha com ocorrência e sem nenhum horário de batida caiu em LIXO (por isso a página 4 tem 4 lixos e as outras 3). Inofensivo para o contrato atual, que não pede as ocorrências.
 
+**JSON no formato do contrato**
+- `date_raw` é montado (dia da linha + mês/ano do cabeçalho da página), não literal — a data completa nunca aparece numa linha só. Risco: se a validação comparar `date_raw` com o texto cru, não bate. Não há alternativa que preserve o mês.
+- `time_raw` e `time_hhmm` saíram idênticos nos 369 punches: este PDF já imprime com zero à esquerda. Normalizei com `zfill` em vez de `int()` pra que um caractere ilegível (`?:25`) vire `0?:25` em vez de estourar.
+- 29/10 ficou com um punch só, `IN`. Deixei o dado como está — o contrato não tem campo pra isso, é aviso derivado.
+- O agente mudou por conta própria: página sem tabela agora entra como `{"page": N, "days": []}` em vez de sumir. Conferi e mantive, porque perder página em silêncio é erro listado no INSTRUCOES.md.
+
 **Como validei**
 - Contei os dias novos: 31 num mês de 31 dias.
 - Defini critérios de acerto antes de rodar: dia 1 → 0 batidas, dia 2 → 4, dia 17 → 4. Os três passaram.
 - Nenhum dia saiu com número ímpar de batidas, que é o esperado já que batida vem em par entrada/saída.
 - Os dias de cada página batem com o calendário real de 2012: jul 31, ago 31, set 30, out 31, nov 30. Total de 153 dias.
 - O dia da semana da primeira linha de cada página também confere com 2012 (1/jul domingo, 1/set sábado, 1/out segunda). É uma checagem independente do meu código: se alguma linha tivesse se perdido ou duplicado, o dia da semana não bateria.
+- 153 dias e 369 punches, os mesmos números da etapa anterior — nada se perdeu na conversão pro formato do contrato.
+- Datas fechando nas bordas de cada página: 01/07 a 31/07, 01/08 a 31/08, etc.
 
 
 ## Cite 3 decisões em que havia mais de uma resposta razoável. Por que escolheu essa?
