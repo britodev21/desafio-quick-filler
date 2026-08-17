@@ -105,6 +105,11 @@ Ainda não decidi o que fazer com 1, 2 e 4 — decidir no dia 3.
 - 29/10 ficou com um punch só, `IN`. Deixei o dado como está — o contrato não tem campo pra isso, é aviso derivado.
 - O agente mudou por conta própria: página sem tabela agora entra como `{"page": N, "days": []}` em vez de sumir. Conferi e mantive, porque perder página em silêncio é erro listado no INSTRUCOES.md.
 
+**Uso de IA — holerite**
+- Ferramenta: Claude Code na IDE. Trabalhei pedindo uma etapa por vez (classificar, depois extrair, depois montar o JSON) e revisando cada entrega antes de seguir.
+- Ele antecipou uma armadilha que eu não tinha visto: o `Dep. I.R.R.F.` que não é base e vem colado na linha do `Base FGTS`. Conferi no PDF e procede.
+- Ele também testou todas as partições possíveis dos 9 valores e mostrou que existe exatamente uma que fecha os dois totais (6 proventos, 3 descontos). Não uso isso como método de separação, porque só funciona quando os totais estão impressos e a partição é única — mas serve como validação.
+
 **Como validei**
 - Contei os dias novos: 31 num mês de 31 dias.
 - Defini critérios de acerto antes de rodar: dia 1 → 0 batidas, dia 2 → 4, dia 17 → 4. Os três passaram.
@@ -113,6 +118,31 @@ Ainda não decidi o que fazer com 1, 2 e 4 — decidir no dia 3.
 - O dia da semana da primeira linha de cada página também confere com 2012 (1/jul domingo, 1/set sábado, 1/out segunda). É uma checagem independente do meu código: se alguma linha tivesse se perdido ou duplicado, o dia da semana não bateria.
 - 153 dias e 369 punches, os mesmos números da etapa anterior — nada se perdeu na conversão pro formato do contrato.
 - Datas fechando nas bordas de cada página: 01/07 a 31/07, 01/08 a 31/08, etc.
+
+---
+
+## Holerite
+
+**O que descobri nos 4 arquivos**
+- `payroll-03` é o caso canônico: uma competência por página, tabela de verbas com código/descrição/unidade/valor, e as bases numa seçãoseparada abaixo do Total.
+- `payroll-02` tem duas folhas na mesma competência (MÊS e ACERTO) e outro cabeçalho de tabela.
+- `payroll-01` é ficha financeira, com vários meses por página e três colunas lado a lado (rendimentos, descontos, resultados) achatadas numa linha só.
+- `payroll-04` é escaneado. O `checar.py` tinha dito que tinha texto, mas era só o carimbo de assinatura eletrônica sobreposto à imagem.
+- Comecei pelo `payroll-03` por ser o mais próximo do que o contrato descreve.
+
+**Decisão: o que define uma verba**
+- Escolhi "tem valor monetário" em vez de "tem código na frente". O contrato aceita `code` vazio quando o documento não mostra, então ancorar no código descartaria verbas legítimas.
+
+**Decisão: rótulos de base ancorados no nome inteiro**
+- A linha `Dep. I.R.R.F. : 0,00 Base FGTS: 1.967,07` traz dois rótulos, e `Dep. I.R.R.F.` é contagem de dependentes, não base. Casar só por `I.R.R.F.` colocaria lixo em `bases` — e errar essa divisão contamina a planilha.
+
+**Decisão: o Total duplicado**
+- A linha `Total` traz dois valores (proventos e descontos) e vira duas entradas com o mesmo label. Considerei renomear para `Total Proventos` e `Total Descontos` para não confundir quem revisa, mas isso desviaria do "label exatamente como impresso", e o JSON é o que a avaliação compara. Mantive o JSON fiel e deixei a distinção para a apresentação — mesma lógica do `_raw` versus normalizado.
+
+**Como validei**
+- A soma dos 9 valores extraídos dá exatamente `1.967,07 + 859,46`, os dois valores da linha Total impressa. E `1.967,07 − 859,46` = `1.107,61`, o Líqüido impresso. Se algum valor tivesse sido lido errado ou trocado com a coluna Unidade, as duas contas não fechariam. É verificação independente do código, igual à do calendário no cartão de ponto.
+
+
 
 
 ## Cite 3 decisões em que havia mais de uma resposta razoável. Por que escolheu essa?
