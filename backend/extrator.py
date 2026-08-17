@@ -12,6 +12,9 @@ PADRAO_CONTINUACAO = re.compile(r"^\d{1,2}:\d{2}\b")
 # por isso quem separa batida de nao-batida e a POSICAO, nao o formato.
 PADRAO_TOKEN_HORARIO = re.compile(r"^\d{1,2}:\d{2}$")
 
+# "Mes/Ano : 7 / 2012" no topo de cada pagina. Cada pagina e um mes.
+PADRAO_MES_ANO = re.compile(r"Mes/Ano\s*:\s*(\d{1,2})\s*/\s*(\d{4})")
+
 DIA_NOVO = "DIA_NOVO"
 CONTINUACAO = "CONTINUACAO"
 LIXO = "LIXO"
@@ -123,60 +126,111 @@ def agrupar_batidas_por_dia(classificadas):
     return dias
 
 
-def processar_cartao_ponto(caminho_pdf):
-    print("iniciando a leitura do PDF...")
+def encontrar_inicio_tabela(linhas):
+    """
+    Devolve o indice do cabecalho da tabela, ou None se a pagina nao tiver.
 
-    with pdfplumber.open(caminho_pdf) as pdf:
-        pagina = pdf.pages[0]
-        texto_bruto = pagina.extract_text() or ""
-        linhas = texto_bruto.split("\n")
-
-    indice_inicio_tabela = None
-
+    Varre as linhas procurando as palavras Entrada e Saida, assim que
+    encontra, significa que tambem encontra o final do cabecalho.
+    """
     for i, linha in enumerate(linhas):
         if "Entrada" in linha and "Saida" in linha:
-            indice_inicio_tabela = i
-            print(f"-> Encontrado o cabecalho na linha {i}: {linha}")
-            break
+            return i
 
-        """
-        Varre as linhas procurando as palavras Entrada e Saida, assim que
-        encontra, significa que tambem encontra o final do cabecalho
-        """
+    return None
+
+
+def extrair_mes_ano(linhas):
+    """Le o "Mes/Ano : 7 / 2012" do topo da pagina. So pra rotular a saida."""
+    for linha in linhas:
+        casamento = PADRAO_MES_ANO.search(linha)
+        if casamento:
+            return f"{int(casamento.group(1)):02}/{casamento.group(2)}"
+
+    return "??/????"
+
+
+def processar_pagina(texto_bruto):
+    """
+    Trata UMA pagina de ponta a ponta, sem depender das outras.
+
+    Cada pagina do PDF e um mes fechado e recomeca a contagem no dia 1, entao
+    achar o cabecalho, classificar e agrupar tem que acontecer dentro dela.
+
+    Devolve None quando a pagina nao tem tabela.
+    """
+    linhas = texto_bruto.split("\n")
+    indice_inicio_tabela = encontrar_inicio_tabela(linhas)
 
     if indice_inicio_tabela is None:
-        print("Nao consegui achar o cabecalho da tabela neste PDF.")
-        return []
+        return None
 
     linhas_tabela = linhas[indice_inicio_tabela + 1:]
-    print(f"Total de linhas brutas na tabela: {len(linhas_tabela)}")
-
     classificadas = classificar_linhas(linhas_tabela)
 
     contagem = {DIA_NOVO: 0, CONTINUACAO: 0, LIXO: 0}
     for tipo, _linha in classificadas:
         contagem[tipo] += 1
 
-    print("\n--- Contagem da classificacao ---")
-    print(f"Dias novos  : {contagem[DIA_NOVO]}")
-    print(f"Continuacoes: {contagem[CONTINUACAO]}")
-    print(f"Lixo        : {contagem[LIXO]}")
-    print(f"Total       : {len(classificadas)}")
-
     dias = agrupar_batidas_por_dia(classificadas)
 
-    print("\n--- Batidas por dia ---")
-    for registro in dias:
-        batidas = " ".join(registro["batidas"]) or "(sem batida)"
+    return {
+        "mes_ano": extrair_mes_ano(linhas[:indice_inicio_tabela]),
+        "linha_cabecalho": indice_inicio_tabela,
+        "linhas_brutas": len(linhas_tabela),
+        "contagem": contagem,
+        "dias": dias,
+        "total_batidas": sum(len(d["batidas"]) for d in dias),
+    }
+
+
+def processar_cartao_ponto(caminho_pdf):
+    print("iniciando a leitura do PDF...")
+
+    with pdfplumber.open(caminho_pdf) as pdf:
+        textos = [pagina.extract_text() or "" for pagina in pdf.pages]
+
+    print(f"-> O PDF tem {len(textos)} paginas.\n")
+
+    paginas = []
+
+    for numero, texto_bruto in enumerate(textos, start=1):
+        resultado = processar_pagina(texto_bruto)
+
+        if resultado is None:
+            print(f"Pagina {numero}: nao achei o cabecalho da tabela, pulando.")
+            continue
+
+        resultado["pagina"] = numero
+        paginas.append(resultado)
+
+        impares = [
+            d["dia"] for d in resultado["dias"] if len(d["batidas"]) % 2 != 0
+        ]
+
         print(
-            f"Dia {registro['dia']:2} ({registro['semana']}): "
-            f"{len(registro['batidas'])} batidas -> {batidas}"
+            f"Pagina {numero} (mes {resultado['mes_ano']}): "
+            f"{len(resultado['dias'])} dias, "
+            f"{resultado['total_batidas']} batidas"
         )
+        print(
+            f"  cabecalho na linha {resultado['linha_cabecalho']}, "
+            f"{resultado['linhas_brutas']} linhas de tabela "
+            f"({resultado['contagem'][DIA_NOVO]} dia novo / "
+            f"{resultado['contagem'][CONTINUACAO]} continuacao / "
+            f"{resultado['contagem'][LIXO]} lixo)"
+        )
+        print(f"  dias com numero impar de batidas: {impares or 'nenhum'}")
 
-    impares = [d["dia"] for d in dias if len(d["batidas"]) % 2 != 0]
-    print(f"\nDias com numero impar de batidas: {impares or 'nenhum'}")
+    total_dias = sum(len(p["dias"]) for p in paginas)
+    total_batidas = sum(p["total_batidas"] for p in paginas)
 
-    return dias
+    print("\n--- Total do arquivo ---")
+    print(f"Paginas com tabela: {len(paginas)}")
+    print(f"Dias             : {total_dias}")
+    print(f"Batidas          : {total_batidas}")
+
+    return paginas
 
 
 # Teste:
