@@ -171,6 +171,49 @@ def get_transcricao(id: str):
     return transcricoes[id]
 
 
+@app.get("/api/transcricoes/{id}/documento")
+def get_documento(id: str):
+    """
+    Devolve o PDF original da transcricao, pra tela mostrar ao lado da tabela.
+
+    Quem confere uma transcricao precisa do documento na frente: sem ele nao
+    da pra saber se "09:03" e o que esta no papel.
+    """
+    if id not in transcricoes:
+        raise HTTPException(status_code=404, detail="Transcrição não encontrada")
+
+    caminho = (DIRETORIO_UPLOADS / f"{id}.pdf").resolve()
+
+    """
+    Duas barreiras, e as duas precisam existir.
+
+    A primeira e o id estar em transcricoes: a chave nasce de um uuid4 que nos
+    geramos, entao nome montado na mao ja para aqui.
+
+    A segunda e o is_relative_to. Um id como "../../algum/arquivo" resolveria
+    pra fora de uploads/, e depender so do dicionario deixaria a rota a uma
+    linha de distancia de virar leitura de arquivo arbitraria - o mesmo
+    cuidado que o servir_front toma logo abaixo.
+    """
+    if not caminho.is_relative_to(DIRETORIO_UPLOADS.resolve()):
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+
+    if not caminho.is_file():
+        """
+        A transcricao existe mas o arquivo nao: sobra da limpeza de inicio, que
+        esvazia uploads/ a cada subida. 404 e a resposta honesta.
+        """
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+
+    return FileResponse(
+        path=caminho,
+        media_type="application/pdf",
+        # inline, e nao attachment: o visualizador da tela abre o PDF na
+        # propria pagina, e um filename= faria o navegador querer baixar.
+        headers={"Content-Disposition": "inline"},
+    )
+
+
 @app.put("/api/transcricoes/{id}")
 def put_transcricao(id: str, correcao: Correcao):
     if id not in transcricoes:

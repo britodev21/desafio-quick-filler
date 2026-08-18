@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import Documento from './Documento'
 import Tabela from './Tabela'
 import './App.css'
 
@@ -250,8 +251,15 @@ function App() {
     if (campoArquivo.current) campoArquivo.current.value = ''
   }
 
+  /*
+   * A página é estreita pro formulário ficar legível, e larga quando o
+   * resultado chega: tabela e PDF lado a lado precisam do espaço, e mantê-la
+   * estreita espremeria os dois em colunas onde nenhum se lê.
+   */
+  const larguraDaPagina = status === 'concluido' ? 'pagina ampla' : 'pagina'
+
   return (
-    <main className="pagina">
+    <main className={larguraDaPagina}>
       <header className="cabecalho">
         <h1>Transcrição de documentos</h1>
         <p>Envie um cartão de ponto ou holerite em PDF.</p>
@@ -335,11 +343,20 @@ function App() {
             edite qualquer célula para corrigir
           </p>
 
-          <Tabela
-            tipo={transcricao.tipo}
-            value={transcricao.value}
-            aoEditar={editarValue}
-          />
+          {/*
+            Tabela e documento lado a lado: conferir uma transcrição é
+            comparar as duas coisas, e separá-las em telas diferentes
+            obrigaria a decorar o que estava na outra.
+          */}
+          <div className="painel">
+            <Tabela
+              tipo={transcricao.tipo}
+              value={transcricao.value}
+              aoEditar={editarValue}
+            />
+
+            <Documento id={id} />
+          </div>
 
           <div className="barra-acoes">
             <button type="button" onClick={salvar} disabled={!pendente || salvando}>

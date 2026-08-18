@@ -29,6 +29,30 @@
   margin: 0 auto;
   padding: 2rem 1.25rem 4rem;
   box-sizing: border-box;
+  /*
+   * O width: 100% nao e redundante com o max-width.
+   *
+   * O #root do template e um flex column, entao a largura da pagina e o eixo
+   * cruzado - e o "margin: 0 auto" daqui de cima cancela o stretch que o flex
+   * daria por padrao. Sem largura declarada, a pagina passa a se dimensionar
+   * pelo conteudo e fica MAIOR que a janela numa tela estreita, jogando
+   * rolagem horizontal na pagina inteira em vez de rolar dentro da tabela.
+   *
+   * O min-width: 0 fecha o outro lado do mesmo problema: flex item nasce com
+   * min-width auto e voltaria a crescer se algum conteudo tivesse min-content
+   * maior que a janela.
+   */
+  width: 100%;
+  min-width: 0;
+}
+
+/*
+ * Com o resultado na tela a página abre, pra tabela e PDF caberem lado a lado
+ * sem se espremerem. Continua com limite: numa tela muito larga, uma linha de
+ * texto que atravessa o monitor inteiro fica pior de ler, não melhor.
+ */
+.pagina.ampla {
+  max-width: 96rem;
 }
 
 .cabecalho h1 {
@@ -199,10 +223,87 @@ button.secundario {
   margin-bottom: 0.25rem;
 }
 
+/* ------------------------------------------- tabela + documento lado a lado */
+
+/*
+ * Duas colunas de mesma largura: a tabela de um lado, o PDF do outro.
+ *
+ * O minmax(0, 1fr) não é enfeite. O padrão de uma coluna de grid é min-width
+ * auto, que a faz crescer até caber o conteúdo - e a tabela do holerite passa
+ * de 14 colunas. Sem o minmax(0, ...) ela empurraria a grade inteira e a
+ * página ganharia rolagem horizontal, em vez de rolar dentro da .rolagem.
+ */
+.painel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+  margin-top: 1rem;
+}
+
+/*
+ * Abaixo de 64rem as duas colunas ficam estreitas demais pra qualquer uma das
+ * duas servir, então elas viram uma só, empilhadas. A tabela vem primeiro por
+ * ser onde se edita; o PDF fica logo abaixo, a uma rolagem de distância.
+ */
+@media (max-width: 64rem) {
+  .painel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ----------------------------------------------------------- documento */
+
+.documento-area {
+  display: flex;
+  flex-direction: column;
+  /* Sem isso, o iframe (que é substituído e tem largura própria) ignora a
+     coluna e vaza pra fora dela. */
+  min-width: 0;
+}
+
+.documento-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  margin-bottom: 0.6rem;
+  /* Alinha com a linha de resumo da tabela, que tem a mesma altura. */
+  min-height: 1.6rem;
+}
+
+/* A mesma altura da .rolagem, pra tabela e documento terminarem juntos. */
+.documento-visor {
+  width: 100%;
+  height: 34rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  /*
+   * Sem o border-box, a borda soma 2px por cima dos 100% e o visor fica mais
+   * largo que a coluna. Num iframe isso nao passa despercebido: os 2px viram
+   * largura minima, sobem por toda a arvore e a pagina inteira ganha rolagem
+   * horizontal no celular.
+   */
+  box-sizing: border-box;
+}
+
+@media (max-width: 64rem) {
+  /* Empilhado, o visor divide a tela com a tabela em vez de ficar ao lado:
+     encurta pra que a tabela continue visível ao rolar. */
+  .documento-visor {
+    height: 26rem;
+  }
+}
+
 /* -------------------------------------------------------------- tabela */
 
 .tabela-area {
-  margin-top: 1rem;
+  /* Sem margem no topo: quem espaça do texto acima é o .painel, e uma margem
+     aqui desceria só esta coluna, desalinhando a tabela do PDF ao lado. */
+  min-width: 0;
 }
 
 .resumo {

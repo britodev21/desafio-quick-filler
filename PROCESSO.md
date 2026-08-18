@@ -521,6 +521,37 @@
   nativo. O render a 300 DPI é o que domina. Reduzir para 200 DPI ou escala de
   cinza é o caminho para acelerar, mas muda a qualidade da leitura.
 
+  **Teste que passa não é o mesmo que coisa que funciona**
+- Ao implementar o PDF ao lado da tabela, a primeira rodada passou em tudo:
+  200 na rota, iframe acessível, layout correto nos três tamanhos de tela.
+  E o PDF não aparecia: o navegador headless usado no teste não tem
+  visualizador de PDF embutido.
+- Só ficou visível quando alguém olhou a captura de tela em vez dos números.
+  Com o PDF de fato renderizando, apareceu um segundo problema real de layout
+  que o teste cego escondia.
+- Registro isso porque é o tipo de falha que passaria pela revisão de código
+  e pelos testes automatizados ao mesmo tempo.
+
+**Testar a proteção, não só o caminho feliz**
+- A rota do documento tem duas barreiras: o id precisa existir no dicionário,
+  e o caminho resolvido precisa estar dentro de `uploads/`. Testar só por URL
+  não distingue as duas, porque a primeira barreira mascara a segunda.
+- Injetei um id que resolve para um PDF real fora de `uploads/`: passou a
+  primeira barreira e a segunda recusou. Sem esse teste, remover a proteção de
+  caminho num refactor futuro não quebraria nenhum teste existente.
+
+  **PDF ao lado da tabela**
+- Rota `GET /api/transcricoes/{id}/documento` serve o PDF original com
+  `Content-Disposition: inline`, não `attachment`, senão o navegador baixa em
+  vez de exibir.
+- Recusa id inexistente com 404 e valida que o caminho resolvido está dentro
+  de `uploads/`, contra travessia de diretório.
+- No front, `<iframe>` com o leitor nativo do navegador, sem biblioteca de
+  renderização: o leitor nativo já traz zoom, busca e paginação. Mais um link
+  para abrir em nova aba, como saída para navegadores que bloqueiam PDF
+  embutido.
+- Layout de duas colunas que empilha em tela estreita.
+
 ## Cite 3 decisões em que havia mais de uma resposta razoável. Por que escolheu essa?
 
 ## O que na sua solução quebra primeiro em produção?
