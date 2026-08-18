@@ -428,6 +428,24 @@
   rederivou o aviso a partir do dado corrigido, igual à tabela na tela. É a
   prova de que os avisos são derivados e não armazenados, de ponta a ponta.
 
+  **Docker**
+- Dockerfile em dois estágios: Node buildando o frontend, Python servindo o
+  build junto com a API. O Node não fica na imagem final.
+- Tesseract e o pacote de português instalados no container desde o começo,
+  antes mesmo do código de OCR existir, para não precisar rebuildar depois.
+- O compose sobe um serviço só, com a porta do host configurável por variável
+  de ambiente.
+
+**Onde validei, e por quê não foi na minha máquina**
+- O firmware do meu notebook não expõe a opção de virtualização na BIOS, mesmo
+  com o processador reportando VT-x como suportado. Sem isso o Docker Desktop
+  não inicia o engine.
+- Consegui subir depois de habilitar o WSL 2 pelo DISM, mas o build morria por
+  falta de memória: a máquina tem 4 GB e o buildkit era encerrado no meio.
+- Validei no GitHub Codespaces, que é um ambiente Linux com Docker instalado.
+  `docker compose up --build` sobe, a interface carrega e o ciclo completo
+  funciona dentro do container.
+
 ## Cite 3 decisões em que havia mais de uma resposta razoável. Por que escolheu essa?
 
 ## O que na sua solução quebra primeiro em produção?
