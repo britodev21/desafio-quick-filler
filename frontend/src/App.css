@@ -303,6 +303,67 @@ button.secundario {
   box-shadow: inset 3px 0 0 var(--borda-vermelha);
 }
 
+/* -------------------------------------------------------- barra de ações */
+
+.barra-acoes {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+.grupo-download {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.rotulo-formato {
+  font-size: 0.85rem;
+  color: var(--text-h);
+}
+
+select {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.55rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+}
+
+select:disabled {
+  opacity: 0.5;
+}
+
+.estado {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.estado.pendente {
+  background: var(--amarelo);
+  border-color: #e8d9a0;
+  color: #6b5b16;
+  font-weight: 600;
+}
+
+.estado.salvo {
+  background: rgba(25, 135, 84, 0.12);
+  border-color: rgba(25, 135, 84, 0.4);
+  color: #146c43;
+}
+
+@media (prefers-color-scheme: dark) {
+  .estado.salvo {
+    color: #75c99b;
+  }
+}
+
 .coluna-aviso {
   padding: 0.4rem 0.75rem;
   white-space: nowrap;

@@ -400,6 +400,33 @@
   o id e a transcrição em andamento. O backend continua processando, mas o
   front não tem como voltar a ela.
 
+**Salvar e baixar**
+- Dois botões abaixo da tabela: salvar correções, que manda o PUT com o estado
+  atual, e baixar, com escolha entre os três formatos.
+
+**Decisão: download com alterações pendentes**
+- Quando há edição não salva, o botão de baixar salva antes. Se o PUT falhar, o
+  download é abortado com o erro na tela.
+- A alternativa era desabilitar o download até salvar, mas isso deixa a pessoa
+  travada sem entender o motivo. Salvar antes honra a intenção de "me dê a
+  tabela atual como arquivo", e nunca entrega arquivo desatualizado em silêncio.
+- O estado de pendência fica sempre visível na tela.
+
+**Decisão: download por blob em vez de navegação**
+- Navegar para a URL funcionaria, porque o backend já manda o
+  `Content-Disposition`. Mas um erro do backend substituiria a página por um
+  JSON numa aba. Com fetch eu confiro o status antes e só disparo o download em
+  caso de sucesso.
+
+**Como validei o ciclo completo**
+- Duas edições diferentes: correção de valor (09:03 para 07:45) e criação de
+  batida faltante no 29/10.
+- As duas chegaram nos três formatos.
+- O `time_raw` do PDF sobreviveu à correção, então a divergência com o
+  `time_hhmm` continua auditável.
+- O destaque amarelo do 29/10 sumiu da planilha depois da correção: o backend
+  rederivou o aviso a partir do dado corrigido, igual à tabela na tela. É a
+  prova de que os avisos são derivados e não armazenados, de ponta a ponta.
 
 ## Cite 3 decisões em que havia mais de uma resposta razoável. Por que escolheu essa?
 

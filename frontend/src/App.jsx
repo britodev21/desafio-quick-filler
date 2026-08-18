@@ -9,6 +9,17 @@ const TIPOS = [
 
 const INTERVALO_POLLING = 2000
 
+const FORMATOS = ['xlsx', 'csv', 'json']
+
+/*
+ * Tira o nome do arquivo do Content-Disposition que o backend manda, pra o
+ * arquivo salvo ter o mesmo nome que teria num download direto.
+ */
+function nomeDoAnexo(cabecalho) {
+  const casamento = /filename="?([^"]+)"?/.exec(cabecalho ?? '')
+  return casamento?.[1] ?? null
+}
+
 function App() {
   const [arquivo, setArquivo] = useState(null)
   const [tipo, setTipo] = useState('cartao-ponto')
@@ -18,10 +29,23 @@ function App() {
   const [erro, setErro] = useState(null)
   const [segundos, setSegundos] = useState(0)
 
+  const [valueSalvo, setValueSalvo] = useState(null)
+  const [salvando, setSalvando] = useState(false)
+  const [baixando, setBaixando] = useState(false)
+  const [salvou, setSalvou] = useState(false)
+  const [formato, setFormato] = useState('xlsx')
+  const [erroAcao, setErroAcao] = useState(null)
+
   const campoArquivo = useRef(null)
 
   const status = transcricao?.status ?? null
   const processando = Boolean(id) && status !== 'concluido' && status !== 'erro'
+
+  /*
+   * Comparação por referência basta: toda edição devolve um objeto novo, e o
+   * valueSalvo guarda exatamente a referência que foi enviada no último PUT.
+   */
+  const pendente = Boolean(transcricao?.value) && transcricao.value !== valueSalvo
 
   /*
    * Polling: consulta a transcrição a cada 2s até o status parar de mudar.
@@ -48,7 +72,13 @@ function App() {
         const dados = await resposta.json()
         // O cancelado evita escrever estado depois que o efeito foi limpo,
         // que é o que acontece no duplo-monta do StrictMode.
-        if (!cancelado) setTranscricao(dados)
+        if (cancelado) return
+
+        setTranscricao(dados)
+
+        // O que acabou de chegar é, por definição, o que está no servidor:
+        // marca como salvo pra não nascer com "alterações pendentes".
+        if (dados.status === 'concluido') setValueSalvo(dados.value)
       } catch (causa) {
         if (!cancelado) setErro(causa.message)
       }
@@ -117,6 +147,93 @@ function App() {
    */
   function editarValue(novoValue) {
     setTranscricao((atual) => ({ ...atual, value: novoValue }))
+    setErroAcao(null)
+  }
+
+  /*
+   * Devolve true quando o servidor ficou com o value atual. Quem chama usa
+   * isso pra decidir se pode seguir - o download depende disso.
+   */
+  async function salvar() {
+    const paraSalvar = transcricao.value
+
+    setSalvando(true)
+    setErroAcao(null)
+
+    try {
+      const resposta = await fetch(`/api/transcricoes/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: paraSalvar }),
+      })
+
+      if (!resposta.ok) {
+        const dados = await resposta.json().catch(() => ({}))
+        throw new Error(dados.detail ?? `Não foi possível salvar (HTTP ${resposta.status}).`)
+      }
+
+      /*
+       * Guarda a referência que foi enviada, e não transcricao.value: se a
+       * pessoa editou enquanto o PUT estava no ar, o pendente volta a ser
+       * verdadeiro sozinho, que é o correto.
+       */
+      setValueSalvo(paraSalvar)
+      setSalvou(true)
+      return true
+    } catch (causa) {
+      setErroAcao(causa.message)
+      return false
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  async function baixar() {
+    setErroAcao(null)
+
+    /*
+     * Salva antes de baixar quando há pendência. Se o PUT falhar, aborta: o
+     * backend gera a planilha do value que ele tem, então baixar aqui
+     * entregaria um arquivo sem as correções e sem ninguém perceber.
+     */
+    if (pendente && !(await salvar())) return
+
+    setBaixando(true)
+
+    try {
+      const resposta = await fetch(
+        `/api/transcricoes/${id}/planilha?formato=${formato}`,
+      )
+
+      if (!resposta.ok) {
+        const dados = await resposta.json().catch(() => ({}))
+        throw new Error(dados.detail ?? `O download falhou (HTTP ${resposta.status}).`)
+      }
+
+      /*
+       * Vai por blob e link com download em vez de navegar pra URL: assim dá
+       * pra checar o status antes e um erro do backend não substitui a página
+       * por um JSON de erro numa aba.
+       */
+      const conteudo = await resposta.blob()
+      const nome =
+        nomeDoAnexo(resposta.headers.get('content-disposition')) ??
+        `${transcricao.tipo}.${formato}`
+
+      const endereco = URL.createObjectURL(conteudo)
+      const link = document.createElement('a')
+      link.href = endereco
+      link.download = nome
+
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(endereco)
+    } catch (causa) {
+      setErroAcao(causa.message)
+    } finally {
+      setBaixando(false)
+    }
   }
 
   function recomecar() {
@@ -125,6 +242,9 @@ function App() {
     setTranscricao(null)
     setErro(null)
     setSegundos(0)
+    setValueSalvo(null)
+    setSalvou(false)
+    setErroAcao(null)
 
     // O input de arquivo é não-controlado: limpar o estado não limpa o campo.
     if (campoArquivo.current) campoArquivo.current.value = ''
@@ -220,6 +340,59 @@ function App() {
             value={transcricao.value}
             aoEditar={editarValue}
           />
+
+          <div className="barra-acoes">
+            <button type="button" onClick={salvar} disabled={!pendente || salvando}>
+              {salvando ? 'Salvando…' : 'Salvar correções'}
+            </button>
+
+            <div className="grupo-download">
+              <label className="rotulo-formato" htmlFor="formato">
+                Formato
+              </label>
+              <select
+                id="formato"
+                value={formato}
+                disabled={salvando || baixando}
+                onChange={(evento) => setFormato(evento.target.value)}
+              >
+                {FORMATOS.map((opcao) => (
+                  <option key={opcao} value={opcao}>
+                    {opcao}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                className="secundario"
+                onClick={baixar}
+                disabled={salvando || baixando}
+              >
+                {baixando ? 'Baixando…' : 'Baixar'}
+              </button>
+            </div>
+
+            {/*
+              O estado das correções fica sempre visível: pendente avisa que o
+              arquivo sairia diferente da tela, e o salvo confirma o PUT. O
+              "salvo" some sozinho na próxima edição, porque volta a pendente.
+            */}
+            {pendente ? (
+              <span className="estado pendente">
+                Alterações não salvas · o download salva antes
+              </span>
+            ) : (
+              salvou && <span className="estado salvo">Correções salvas</span>
+            )}
+          </div>
+
+          {erroAcao && (
+            <div className="aviso falha" role="alert">
+              <strong>Não deu certo</strong>
+              <p className="detalhe">{erroAcao}</p>
+            </div>
+          )}
         </section>
       )}
     </main>
