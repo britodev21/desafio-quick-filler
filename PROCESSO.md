@@ -199,6 +199,27 @@ Ainda não decidi o que fazer com 1, 2 e 4 — decidir no dia 3.
 - PDF corrompido → `status: erro`, mensagem genérica, `value: null`
 - Depois das rejeições, `uploads/` continuava vazio
 
+**Planilhas em xlsx**
+- Cartão de ponto: uma linha por dia, coluna Data mais os pares Entrada/Saída, com tantos pares quantos o dia com mais batidas exigir. Saiu 154 × 5.
+- Holerite: a transposição. No documento as verbas são lista vertical por página; na planilha viram matriz larga, uma coluna por verba distinta na ordem de primeira aparição global. Saiu 6 × 14 — 3 fixas mais 11 verbas.
+- Só `fields` viram coluna. As `bases` ficam fora da planilha, conforme o contrato e é justamente isso que eles chamam de "contaminar a planilha" se uma base entrar em `fields` por engano.
+- Os quatro avisos são derivados na hora de gerar, nunca campos do JSON.
+
+**Decisão: data ou competência ilegível**
+- Uma data com `?` não vira alerta vermelho, e a próxima data legível é comparada com a última legível, não com a ilegível.
+- O README escreve essa regra para o holerite; estendi por analogia para o cartão de ponto, onde o texto não detalha.
+- Efeito: `10/07 → 1?/07 → 12/07` marca o `12/07` como não sequencial, porque a comparação vê salto de 2 dias. Se o `1?` era 11, a linha foi marcada à toa. Escolhi a leitura conservadora: marcar a mais é melhor que deixar passar.
+
+**Como validei**
+- O `time-card-01` tem datas perfeitamente sequenciais, então só uma das quatro regras disparava com dado real. Testei as outras três com dados sintéticos e li as cores de volta do arquivo salvo, em vez de conferir só o código.
+- A regra dezembro → janeiro não precisou de teste sintético: as páginas 3 e 4 do `payroll-03` são 12/2019 → 01/2020 e passaram sem marcação.
+- Depois da refatoração que unificou as peças das duas planilhas, rodei a regressão do cartão de ponto: continua 154 × 5 com a mesma única linha amarela.
+
+**Detalhes**
+- Mês e Ano ficam como texto, não número: converter comeria o zero à esquerda de `01`. O Excel avisa "número armazenado como texto" nessas colunas.
+- Célula de verba ausente é `None`, não string vazia.
+- Verba repetida na mesma página mantém o primeiro valor e emite aviso no log, a matriz tem uma célula só, então em silêncio um valor sumiria.
+
 
 
 

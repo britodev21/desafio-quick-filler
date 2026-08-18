@@ -1,6 +1,3 @@
-# Saídas geradas pela aplicação
-output/
-
 # PDFs enviados pela API em tempo de execução (documentos de terceiros)
 uploads/
 
