@@ -2,6 +2,7 @@
   "pages": [
     {
       "page": 1,
+      "folha": "",
       "year": "2019",
       "month": "10",
       "fields": [
@@ -97,6 +98,7 @@
     },
     {
       "page": 2,
+      "folha": "",
       "year": "2019",
       "month": "11",
       "fields": [
@@ -192,6 +194,7 @@
     },
     {
       "page": 3,
+      "folha": "",
       "year": "2019",
       "month": "12",
       "fields": [
@@ -299,6 +302,7 @@
     },
     {
       "page": 4,
+      "folha": "",
       "year": "2020",
       "month": "01",
       "fields": [
@@ -394,6 +398,7 @@
     },
     {
       "page": 5,
+      "folha": "",
       "year": "2020",
       "month": "02",
       "fields": [

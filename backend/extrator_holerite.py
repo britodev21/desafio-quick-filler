@@ -11,22 +11,69 @@ VERBA = "VERBA"
 BASE = "BASE"
 LIXO = "LIXO"
 
-# "Periodo : 10/2019". O \w cobre o "i" acentuado sem depender do encoding.
+"""
+Competencia da folha, nas duas grafias que os documentos usam: "Periodo :
+10/2019" e "Mes/Ano: 08/2018". Os dois trazem mes e ano na mesma ordem, entao
+mudam o rotulo e nao o conteudo. O \\w cobre a letra acentuada sem depender do
+encoding.
+"""
 PADRAO_PERIODO = re.compile(r"Per\wodo\s*:\s*(\d{1,2})/(\d{4})")
-
-# Valor monetario brasileiro: "1.678,61", "76,30", "0,00".
-PADRAO_VALOR = re.compile(r"\d{1,3}(?:\.\d{3})*,\d{2}")
+PADRAO_MES_ANO = re.compile(r"M\ws/Ano\s*:\s*(\d{1,2})/(\d{4})")
+PADROES_COMPETENCIA = (PADRAO_PERIODO, PADRAO_MES_ANO)
 
 """
-Codigo da verba no comeco da linha: "0105", "4039", mas tambem "/314" e "/B02".
-Se nao casar, a verba fica com code "" e a label comeca do inicio da linha,
-que e o que o contrato pede pra documento sem codigo.
-"""
-PADRAO_CODIGO = re.compile(r"^([0-9/][0-9A-Za-z]{3})\b")
+Valor monetario brasileiro: "1.678,61", "76,30", "0,00", "-433,20".
 
-# Palavras do cabecalho da tabela de verbas. Todas ASCII de proposito, porque
-# "Descricao" vem acentuado e nao da pra confiar no acento.
-MARCADORES_INICIO_TABELA = ("Cod.", "Proventos", "Descontos")
+O sinal e opcional porque nem todo modelo separa provento de desconto em duas
+colunas: parte deles usa uma coluna Valor so, e marca o desconto com o menos
+na frente. Sem o "-?", o token "-433,20" nao e reconhecido como valor, a verba
+inteira vira label e o desconto some da transcricao.
+"""
+PADRAO_VALOR = re.compile(r"-?\d{1,3}(?:\.\d{3})*,\d{2}")
+
+"""
+Rotulo da folha dentro da pagina: "Folha de Pagamento: MES", "... : ACERTO".
+
+Uma pagina pode trazer mais de uma folha da mesma competencia (a do mes e a de
+acerto), cada uma com sua tabela e seus totais. Exige os dois-pontos pra nao
+casar com o titulo "Declaracao Remuneracao - Folha de Pagamento", que e outra
+coisa e aparece na mesma pagina.
+"""
+PADRAO_FOLHA = re.compile(r"Folha de Pagamento\s*:\s*(\S+)")
+
+"""
+Codigo da verba no comeco da linha: "0105", "4039", "/314", "/B02", "010".
+
+Aceita tres ou quatro caracteres porque o tamanho do codigo e escolha de cada
+sistema - um usa "0105" e outro "010" pra mesma coisa. Se nao casar, a verba
+fica com code "" e a label comeca do inicio da linha, que e o que o contrato
+pede pra documento sem codigo.
+"""
+PADRAO_CODIGO = re.compile(r"^([0-9/][0-9A-Za-z]{2,3})\b")
+
+"""
+Palavras que identificam o cabecalho da tabela de verbas, um conjunto por
+modelo de documento. Basta um conjunto inteiro aparecer na linha.
+
+  "Cod. Descricao Unidade Proventos Descontos"
+  "Verba Nome Base / Saldo / Beneficio Valor"
+
+Todas ASCII de proposito, porque "Descricao" e "Beneficio" vem acentuados e
+nao da pra confiar no acento.
+"""
+CABECALHOS_DE_TABELA = (
+    ("Cod.", "Proventos", "Descontos"),
+    ("Verba", "Nome", "Valor"),
+)
+
+"""
+O que fecha a tabela e abre a regiao de totais.
+
+Um modelo termina com a linha "Total ..."; o outro nao tem Total nenhum e
+emenda direto nos totais da folha, que sempre trazem "Proventos Retidos".
+"""
+MARCADOR_TOTAL = "Total"
+MARCADOR_TOTAIS_DA_FOLHA = "Proventos Retidos"
 
 """
 Rotulos da secao de bases e totais. Sao ancorados no nome inteiro: "Base
@@ -40,25 +87,50 @@ ROTULOS_BASE = (
     re.compile(r"Base I\.R\.R\.F\."),
     re.compile(r"F\.G\.T\.S\."),
     re.compile(r"Base FGTS"),
+    # Totais do modelo que fecha a folha sem linha "Total": todos vem
+    # rotulados na propria linha, no formato "rotulo: valor".
+    re.compile(r"^Proventos\b"),
+    re.compile(r"^Provis\wo FGTS"),
+    re.compile(r"^Margem\b"),
+    re.compile(r"^Consigna"),
+    re.compile(r"^Adiantamento\b"),
+    re.compile(r"^Remunera\w\wo Fun"),
 )
 
 
 def extrair_periodo(linhas):
     """
-    Le o "Periodo : 10/2019" e devolve (year, month) como string, month com
-    zero a esquerda. Devolve ("", "") se a pagina nao trouxer o periodo.
+    Le a competencia e devolve (year, month) como string, month com zero a
+    esquerda. Devolve ("", "") se a folha nao trouxer competencia nenhuma.
     """
     for linha in linhas:
-        casamento = PADRAO_PERIODO.search(linha)
-        if casamento:
-            return casamento.group(2), f"{int(casamento.group(1)):02}"
+        for padrao in PADROES_COMPETENCIA:
+            casamento = padrao.search(linha)
+            if casamento:
+                return casamento.group(2), f"{int(casamento.group(1)):02}"
 
     return "", ""
 
 
 def eh_inicio_tabela(linha):
-    """A linha "Cod. Descricao Unidade Proventos Descontos" abre a tabela."""
-    return all(marcador in linha for marcador in MARCADORES_INICIO_TABELA)
+    """Diz se a linha e o cabecalho da tabela, em qualquer um dos modelos."""
+    return any(
+        all(marcador in linha for marcador in conjunto)
+        for conjunto in CABECALHOS_DE_TABELA
+    )
+
+
+def eh_fim_da_tabela(linha):
+    """
+    Diz se a linha fecha a tabela de verbas.
+
+    Ela propria ja e a primeira linha de totais nos dois modelos, entao quem
+    chama classifica como BASE em vez de descartar.
+    """
+    return (
+        linha.startswith(MARCADOR_TOTAL)
+        or MARCADOR_TOTAIS_DA_FOLHA in linha
+    )
 
 
 def eh_rotulo_de_base(texto):
@@ -95,8 +167,8 @@ def classificar_linhas(linhas):
             tipo = BASE if eh_rotulo_de_base(linha) else LIXO
 
         elif dentro_da_tabela:
-            if linha.startswith("Total"):
-                # O Total fecha a tabela e ja e a primeira linha de base.
+            if eh_fim_da_tabela(linha):
+                # A linha que fecha a tabela ja e a primeira linha de base.
                 tabela_terminou = True
                 dentro_da_tabela = False
                 tipo = BASE
@@ -224,9 +296,42 @@ def extrair_bases_da_linha(linha):
     return pares
 
 
-def montar_json_pagina(classificadas, numero_pagina, year, month):
+def separar_folhas(linhas):
     """
-    Monta o {"page", "year", "month", "fields", "bases"} do contrato.
+    Divide a pagina nas folhas que ela contem. Devolve [(rotulo, linhas)].
+
+    Uma pagina pode trazer a folha do mes e a de acerto, uma embaixo da outra,
+    com a mesma competencia e cada uma com sua tabela e seus totais. Tratar as
+    duas como uma so misturaria verbas de folhas diferentes na mesma linha da
+    planilha - e, como varias verbas se repetem entre elas, a segunda folha
+    seria descartada na transposicao.
+
+    Documento que nao rotula folha nenhuma volta como uma folha unica, sem
+    rotulo, que e exatamente o comportamento de antes.
+    """
+    inicios = [
+        numero for numero, linha in enumerate(linhas)
+        if PADRAO_FOLHA.search(linha)
+    ]
+
+    if not inicios:
+        return [("", linhas)]
+
+    folhas = []
+
+    for posicao, inicio in enumerate(inicios):
+        # Cada folha vai do proprio rotulo ate o rotulo da seguinte; a ultima
+        # leva o rodape junto, que vira LIXO na classificacao.
+        fim = inicios[posicao + 1] if posicao + 1 < len(inicios) else len(linhas)
+        rotulo = PADRAO_FOLHA.search(linhas[inicio]).group(1)
+        folhas.append((rotulo, linhas[inicio:fim]))
+
+    return folhas
+
+
+def montar_json_pagina(classificadas, numero_pagina, year, month, folha=""):
+    """
+    Monta o {"page", "folha", "year", "month", "fields", "bases"} do contrato.
 
     Nas bases, so entra quem tem rotulo de base de verdade: a linha do
     "Dep. I.R.R.F." (numero de dependentes) vem colada na do "Base FGTS" e
@@ -246,6 +351,8 @@ def montar_json_pagina(classificadas, numero_pagina, year, month):
 
     return {
         "page": numero_pagina,
+        # "" quando o documento nao separa folhas: uma folha por pagina.
+        "folha": folha,
         "year": year,
         "month": month,
         "fields": fields,
@@ -257,18 +364,27 @@ def processar_pagina(texto_bruto, numero_pagina):
     """
     Trata UMA pagina de ponta a ponta, sem depender das outras.
 
-    Cada pagina do PDF e uma competencia fechada, com o proprio periodo no
-    topo e a propria tabela, entao ler o periodo, classificar e extrair tem
-    que acontecer dentro dela.
+    Devolve uma LISTA, com uma entrada por folha da pagina: a unidade do
+    documento e a folha, e nao a pagina - cada folha tem competencia, tabela e
+    totais proprios. Numa pagina com uma folha so, que e o caso comum, a lista
+    vem com um item.
 
-    Devolve sempre o dict do contrato. Pagina sem tabela volta com fields e
-    bases vazios em vez de sumir da saida.
+    Pagina sem tabela volta com fields e bases vazios em vez de sumir da
+    saida.
     """
     linhas = texto_bruto.split("\n")
-    year, month = extrair_periodo(linhas)
-    classificadas = classificar_linhas(linhas)
+    paginas = []
 
-    return montar_json_pagina(classificadas, numero_pagina, year, month)
+    for rotulo, linhas_da_folha in separar_folhas(linhas):
+        year, month = extrair_periodo(linhas_da_folha)
+        classificadas = classificar_linhas(linhas_da_folha)
+        paginas.append(
+            montar_json_pagina(
+                classificadas, numero_pagina, year, month, rotulo
+            )
+        )
+
+    return paginas
 
 
 def competencia_da_pagina(pagina):
@@ -286,6 +402,10 @@ def conferir_competencias_consecutivas(pages):
     Compara em meses absolutos (ano * 12 + mes) porque a sequencia atravessa
     a virada de ano: 12/2019 -> 01/2020 e consecutivo, e comparar so o numero
     do mes acharia que voltou pra tras.
+
+    Repetir a competencia nao e buraco: duas folhas da mesma competencia (a do
+    mes e a de acerto) sao duas entradas com o mesmo mes de proposito, e so
+    quem pula ou volta no tempo e problema.
     """
     indices = [
         int(p["year"]) * 12 + int(p["month"])
@@ -296,7 +416,7 @@ def conferir_competencias_consecutivas(pages):
     if len(indices) < 2:
         return True, []
 
-    buracos = [(a, b) for a, b in pairwise(indices) if b - a != 1]
+    buracos = [(a, b) for a, b in pairwise(indices) if b - a not in (0, 1)]
 
     return not buracos, buracos
 
@@ -313,22 +433,26 @@ def processar_holerite(caminho_pdf):
     pages = []
 
     for numero, texto_bruto in enumerate(textos, start=1):
-        pagina = processar_pagina(texto_bruto, numero)
-        pages.append(pagina)
+        # Uma pagina pode render mais de uma folha, e cada folha e uma entrada
+        # da saida.
+        folhas = processar_pagina(texto_bruto, numero)
+        pages.extend(folhas)
 
-        logger.debug(
-            "Pagina %s: competencia %s, %s fields, %s bases",
-            numero,
-            competencia_da_pagina(pagina),
-            len(pagina["fields"]),
-            len(pagina["bases"]),
-        )
-
-        if not pagina["fields"]:
+        for pagina in folhas:
             logger.debug(
-                "Pagina %s: sem tabela de verbas, entra na saida vazia",
+                "Pagina %s%s: competencia %s, %s fields, %s bases",
                 numero,
+                f" folha {pagina['folha']}" if pagina["folha"] else "",
+                competencia_da_pagina(pagina),
+                len(pagina["fields"]),
+                len(pagina["bases"]),
             )
+
+            if not pagina["fields"]:
+                logger.debug(
+                    "Pagina %s: sem tabela de verbas, entra na saida vazia",
+                    numero,
+                )
 
     competencias = [competencia_da_pagina(p) for p in pages]
     consecutivas, buracos = conferir_competencias_consecutivas(pages)

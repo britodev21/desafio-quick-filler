@@ -552,6 +552,26 @@
   embutido.
 - Layout de duas colunas que empilha em tela estreita.
 
+**payroll-02**
+- Generalizou no parsing: as seis diferenças de layout caíram em pontos que o
+  extrator já tratava como parâmetro. A mais perigosa era o valor: neste modelo
+  desconto é sinal negativo, não coluna separada, e o padrão de valor não
+  aceitava o sinal. A verba virava label sem valor, falha silenciosa.
+- Não generalizou no modelo: cada página traz duas folhas (MÊS e ACERTO) na
+  mesma competência, com as mesmas verbas repetidas. Escolhi uma linha por
+  folha, com o rótulo vindo do próprio documento.
+- Descartei as alternativas: pôr o nome da folha no label desviaria do "label
+  exatamente como impresso", e processar só a folha MÊS descartaria dado de
+  propósito.
+- Verba repetida dentro da mesma folha vira coluna com sufixo numérico, e o
+  sufixo é removido ao gravar de volta na edição.
+
+**Teste de paridade entre tela e planilha**
+- O front espelha as regras do backend, e isso era só uma promessa em
+  comentário. Escrevi um teste que monta a tabela nas duas implementações sobre
+  o mesmo dado e compara colunas, células e destaques.
+- Sem ele, a tela poderia mostrar uma coisa e o arquivo baixado outra.
+
 ## Cite 3 decisões em que havia mais de uma resposta razoável. Por que escolheu essa?
 
 ## O que na sua solução quebra primeiro em produção?

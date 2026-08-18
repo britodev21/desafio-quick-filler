@@ -176,49 +176,90 @@ function editarCartaoPonto(value, tabela, linha, indiceColuna, novoValor) {
 
 const COLUNAS_FIXAS_HOLERITE = ['Pág.', 'Mês', 'Ano']
 
+/*
+ * Nome de coluna de cada verba da página, na ordem em que aparecem.
+ *
+ * Mesma regra do rotulos_das_verbas do backend: a verba que se repete dentro
+ * da mesma folha ganha um contador no nome, porque a tabela tem uma célula por
+ * coluna e sem isso a segunda ocorrência sobrescreveria a primeira.
+ */
+function rotulosDasVerbas(pagina) {
+  const vistos = new Map()
+
+  return pagina.fields.map(({ label }) => {
+    const ocorrencia = (vistos.get(label) ?? 0) + 1
+    vistos.set(label, ocorrencia)
+    return ocorrencia === 1 ? label : `${label} (${ocorrencia})`
+  })
+}
+
 export function colunasDeVerbas(value) {
   const vistas = new Set()
   const verbas = []
 
   value.pages.forEach((pagina) => {
-    pagina.fields.forEach(({ label }) => {
-      if (vistas.has(label)) return
-      vistas.add(label)
-      verbas.push(label)
+    rotulosDasVerbas(pagina).forEach((rotulo) => {
+      if (vistas.has(rotulo)) return
+      vistas.add(rotulo)
+      verbas.push(rotulo)
     })
   })
 
   return verbas
 }
 
+/*
+ * Documento que separa folhas dentro da página (mês, acerto). A coluna só
+ * aparece quando existe folha rotulada: num holerite comum ficaria vazia da
+ * primeira à última linha.
+ */
+function temFolhas(value) {
+  return value.pages.some((pagina) => pagina.folha)
+}
+
 function tabelaHolerite(value) {
   const verbas = colunasDeVerbas(value)
-  const colunas = [...COLUNAS_FIXAS_HOLERITE, ...verbas]
+  const comFolha = temFolhas(value)
+
+  const fixas = comFolha
+    ? ['Pág.', 'Folha', 'Mês', 'Ano']
+    : COLUNAS_FIXAS_HOLERITE
+  const colunas = [...fixas, ...verbas]
 
   let ultimaCompetencia = null
 
   const linhas = value.pages.map((pagina, iPagina) => {
+    const rotulos = rotulosDasVerbas(pagina)
     const porVerba = new Map()
-    pagina.fields.forEach((field) => {
-      // Primeira aparição vence, igual à planilha.
-      if (!porVerba.has(field.label)) porVerba.set(field.label, field.value)
-    })
+    rotulos.forEach((rotulo, i) => porVerba.set(rotulo, pagina.fields[i].value))
 
+    // Duas folhas da mesma página viram duas linhas com o mesmo número: é a
+    // folha que diz qual é qual.
     const celulas = [
       pagina.page ?? '',
+      ...(comFolha ? [pagina.folha ?? ''] : []),
       pagina.month ?? '',
       pagina.year ?? '',
       ...verbas.map((verba) => porVerba.get(verba) ?? ''),
     ]
 
-    const semVerba = celulas.slice(COLUNAS_FIXAS_HOLERITE.length).every(vazia)
+    const semVerba = celulas.slice(fixas.length).every(vazia)
     const incerto = temIncerteza(celulas)
 
-    const competencia = numeroDaCompetencia(celulas[1], celulas[2])
+    const competencia = numeroDaCompetencia(
+      celulas[fixas.length - 2],
+      celulas[fixas.length - 1],
+    )
     let naoSequencial = false
 
     if (competencia !== null && ultimaCompetencia !== null) {
-      naoSequencial = competencia - ultimaCompetencia !== 1
+      /*
+       * Repetir a competência não é furo: duas folhas da mesma página (mês e
+       * acerto) são duas linhas do mesmo mês de propósito. Só pular ou voltar
+       * no tempo merece o vermelho.
+       */
+      const passo = competencia - ultimaCompetencia
+      naoSequencial = passo !== 0 && passo !== 1
     }
     if (competencia !== null) ultimaCompetencia = competencia
 
@@ -248,6 +289,13 @@ function comPagina(value, iPagina, alterar) {
 
 function editarHolerite(value, tabela, linha, indiceColuna, novoValor) {
   const { iPagina } = linha.caminho
+  const comFolha = temFolhas(value)
+
+  // As colunas fixas mudam de posição quando existe a coluna Folha, então o
+  // índice do Mês e do Ano sai daqui, e não de números soltos.
+  const totalFixas = comFolha ? 4 : 3
+  const iMes = totalFixas - 2
+  const iAno = totalFixas - 1
 
   return comPagina(value, iPagina, (pagina) => {
     if (indiceColuna === 0) {
@@ -258,13 +306,20 @@ function editarHolerite(value, tabela, linha, indiceColuna, novoValor) {
       return { ...pagina, page: ehNumero ? numero : novoValor }
     }
 
+    if (comFolha && indiceColuna === 1) return { ...pagina, folha: novoValor }
+
     // month e year ficam string, como o contrato pede: virar número comeria o
     // zero à esquerda de "01".
-    if (indiceColuna === 1) return { ...pagina, month: novoValor }
-    if (indiceColuna === 2) return { ...pagina, year: novoValor }
+    if (indiceColuna === iMes) return { ...pagina, month: novoValor }
+    if (indiceColuna === iAno) return { ...pagina, year: novoValor }
 
-    const label = tabela.colunas[indiceColuna]
-    const indice = pagina.fields.findIndex((field) => field.label === label)
+    /*
+     * Acha a verba pelo rótulo da COLUNA, e não pelo label do field: quando a
+     * mesma verba aparece duas vezes na folha, os dois fields têm o mesmo
+     * label e só a posição distingue qual das duas células está sendo editada.
+     */
+    const rotulo = tabela.colunas[indiceColuna]
+    const indice = rotulosDasVerbas(pagina).indexOf(rotulo)
 
     if (indice >= 0) {
       const fields = [...pagina.fields]
@@ -275,6 +330,13 @@ function editarHolerite(value, tabela, linha, indiceColuna, novoValor) {
     // Célula vazia numa verba que não existe nesta página: só cria a verba se
     // o usuário digitou alguma coisa.
     if (novoValor.trim() === '') return pagina
+
+    /*
+     * A verba nova nasce com o label da coluna. Se a coluna for uma
+     * desambiguada ("... (2)"), o sufixo é marca da tabela e não pertence ao
+     * documento: tira antes de gravar no field.
+     */
+    const label = rotulo.replace(/ \(\d+\)$/, '')
 
     return {
       ...pagina,

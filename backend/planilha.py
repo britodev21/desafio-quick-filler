@@ -1,7 +1,7 @@
 import csv
 import json
 import logging
-from collections import namedtuple
+from collections import Counter, namedtuple
 from datetime import datetime
 
 from openpyxl import Workbook
@@ -210,46 +210,61 @@ def gerar_csv_cartao_ponto(dados, caminho_saida):
 # ---------------------------------------------------------------------------
 
 
+def rotulos_das_verbas(pagina):
+    """
+    Nome de coluna de cada verba da pagina, na ordem em que aparecem.
+
+    A mesma verba pode aparecer duas vezes na mesma folha com valores
+    diferentes - "CONTRIBUICAO NEGOCIAL" lancada em duas parcelas, por
+    exemplo. Como a planilha tem uma celula por coluna, a segunda ocorrencia
+    ganha um contador no nome em vez de sobrescrever a primeira: o numero e
+    marca nossa, mas perder o valor apagaria um dado que esta no documento.
+    """
+    vistos = Counter()
+    rotulos = []
+
+    for field in pagina["fields"]:
+        vistos[field["label"]] += 1
+        ocorrencia = vistos[field["label"]]
+
+        if ocorrencia == 1:
+            rotulos.append(field["label"])
+        else:
+            rotulos.append(f"{field['label']} ({ocorrencia})")
+
+    return rotulos
+
+
 def colunas_de_verbas(dados):
     """
-    Uniao de todos os label de fields, na ordem de primeira aparicao no
-    documento.
+    Uniao dos rotulos de verba, na ordem de primeira aparicao no documento.
 
     dict.fromkeys guarda a ordem de insercao e ignora repetido, que e
     exatamente "primeira aparicao vence".
     """
     return list(dict.fromkeys(
-        field["label"]
+        rotulo
         for pagina in dados["pages"]
-        for field in pagina["fields"]
+        for rotulo in rotulos_das_verbas(pagina)
     ))
 
 
 def valores_por_verba(pagina):
+    """Mapeia rotulo de coluna -> value dentro de uma pagina."""
+    return {
+        rotulo: field["value"]
+        for rotulo, field in zip(rotulos_das_verbas(pagina), pagina["fields"])
+    }
+
+
+def tem_folhas(paginas):
     """
-    Mapeia label -> value dentro de uma pagina.
+    Diz se o documento separa folhas dentro da pagina (mes, acerto).
 
-    Se a mesma verba aparecer duas vezes na mesma pagina, a primeira vence e a
-    segunda vira aviso no log: a planilha tem uma celula so pra ela, entao
-    escolher em silencio esconderia um dado do documento.
+    A coluna so aparece em quem tem folha rotulada: num holerite comum ela
+    ficaria vazia da primeira a ultima linha.
     """
-    valores = {}
-
-    for field in pagina["fields"]:
-        if field["label"] in valores:
-            logger.warning(
-                "pagina %s: verba %r aparece mais de uma vez, mantendo o "
-                "primeiro valor (%r) e ignorando %r",
-                pagina["page"],
-                field["label"],
-                valores[field["label"]],
-                field["value"],
-            )
-            continue
-
-        valores[field["label"]] = field["value"]
-
-    return valores
+    return any(pagina.get("folha") for pagina in paginas)
 
 
 def ler_competencia(pagina):
@@ -290,7 +305,12 @@ def derivar_avisos_holerite(paginas):
         if competencia is None or ultima_competencia is None:
             nao_sequencial = False
         else:
-            nao_sequencial = competencia - ultima_competencia != 1
+            """
+            Repetir a competencia nao e furo: duas folhas da mesma pagina (mes
+            e acerto) sao duas linhas do mesmo mes de proposito. So pular ou
+            voltar no tempo e que merece o vermelho.
+            """
+            nao_sequencial = competencia - ultima_competencia not in (0, 1)
 
         if competencia is not None:
             ultima_competencia = competencia
@@ -315,7 +335,10 @@ def tabela_holerite(dados):
     """
     paginas = dados["pages"]
     verbas = colunas_de_verbas(dados)
-    cabecalho = ["Pág.", "Mês", "Ano"] + verbas
+    com_folha = tem_folhas(paginas)
+
+    fixas = ["Pág."] + (["Folha"] if com_folha else []) + ["Mês", "Ano"]
+    cabecalho = fixas + verbas
     avisos = derivar_avisos_holerite(paginas)
 
     linhas = []
@@ -327,7 +350,14 @@ def tabela_holerite(dados):
         Mes e Ano ficam string, como vieram do contrato: virar numero comeria
         o zero a esquerda de "01" e a saida mostraria 1.
         """
-        linha = [pagina["page"], pagina["month"], pagina["year"]]
+        linha = [pagina["page"]]
+
+        if com_folha:
+            # Duas folhas da mesma pagina viram duas linhas com o mesmo
+            # numero: e a folha que diz qual e qual.
+            linha.append(pagina.get("folha", ""))
+
+        linha += [pagina["month"], pagina["year"]]
 
         # None deixa a celula em branco de verdade quando a verba nao aparece
         # nesta pagina; "" criaria uma string vazia.
@@ -339,7 +369,15 @@ def tabela_holerite(dados):
 
 
 def gerar_planilha_holerite(dados, caminho_saida):
-    return escrever_xlsx(tabela_holerite(dados), "Holerite", caminho_saida, "D2")
+    """
+    O congelamento acompanha as colunas fixas: sem folha sao Pag./Mes/Ano e a
+    rolagem comeca em D; com folha entra mais uma e comeca em E.
+    """
+    congelar = "E2" if tem_folhas(dados["pages"]) else "D2"
+
+    return escrever_xlsx(
+        tabela_holerite(dados), "Holerite", caminho_saida, congelar
+    )
 
 
 def gerar_csv_holerite(dados, caminho_saida):
