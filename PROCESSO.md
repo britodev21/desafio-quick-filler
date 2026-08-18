@@ -343,6 +343,63 @@
   iniciar.
 - Subpastas não são tocadas.
 
+---
+
+## Interface
+
+**Setup**
+- React com Vite. Proxy no `vite.config.js` encaminhando `/api` e `/healthz`
+  para o backend, em vez de configurar CORS. Assim as chamadas são relativas e
+  continuam funcionando quando o React for buildado e servido pelo próprio
+  FastAPI.
+
+**Upload e polling**
+- Depois do POST, a tela consulta o GET a cada 2 segundos até o status virar
+  `concluido` ou `erro`. A primeira consulta sai imediatamente, sem esperar os
+  2 segundos, senão a tela ficaria muda no começo.
+- Além do spinner, mostro um contador de segundos. Spinner sozinho fica
+  idêntico com o backend trabalhando ou travado; o relógio andando distingue
+  os dois.
+- O efeito depende do `status`, não do objeto da transcrição. Se dependesse do
+  objeto, cada resposta criaria um intervalo novo e as consultas dobrariam a
+  cada ciclo.
+
+**Tabela editável**
+- A lógica dos avisos ficou em funções puras separadas do componente,
+  espelhando o que o `planilha.py` faz no backend. Conferi que as colunas, a
+  ordem, as linhas e os destaques batem exatamente com a planilha gerada: se
+  divergissem, a tela mostraria uma coisa e o arquivo baixado outra.
+- Os avisos são derivados na hora de exibir, nunca campos do JSON.
+
+**Decisão: editar preserva o `time_raw`**
+- Ao corrigir uma batida, altero o `time_hhmm` e mantenho o `time_raw`. É o par
+  que o contrato descreve: o documento diz uma coisa, eu interpretei outra, e a
+  divergência entre os dois é o que permite auditar a correção depois.
+
+**Decisão: célula vazia cria a batida**
+- Digitar numa coluna além das batidas existentes cria a batida. Sem isso, o
+  dia com aviso de batidas ímpares não teria como ser corrigido pela interface,
+  que é justamente o problema que o aviso existe para sinalizar. O `kind` sai
+  da posição: par é IN, ímpar é OUT.
+
+**Decisão: coluna de aviso por escrito**
+- Além da cor, uma coluna no fim com o motivo em texto. Cor sozinha não
+  comunica para quem não distingue cores ou usa leitor de tela, e o enunciado
+  pede o motivo legível, não só o destaque visual.
+
+**Bug encontrado**
+- Nomeei a lógica como `tabela.js` ao lado do componente `Tabela.jsx`. O
+  Windows não diferencia maiúsculas, então o import resolveu para o arquivo
+  errado e o build quebrou. No Linux resolveria certo, então isso passaria
+  despercebido aqui e quebraria só no deploy. Renomeei para `regrasTabela.js`.
+- Depois de renomear, o erro persistiu até eu reiniciar o Vite: o cache dele
+  ainda segurava o módulo antigo.
+
+**Limitação conhecida**
+- Estado só em React, sem armazenamento no navegador. Recarregar a página perde
+  o id e a transcrição em andamento. O backend continua processando, mas o
+  front não tem como voltar a ela.
+
 
 ## Cite 3 decisões em que havia mais de uma resposta razoável. Por que escolheu essa?
 

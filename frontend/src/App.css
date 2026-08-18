@@ -1,0 +1,315 @@
+/*
+ * O index.css do template deixa o #root com largura fixa, borda nas laterais
+ * e texto centralizado. Aqui a página é um formulário, então desfaz isso e
+ * mantém só as variáveis de cor, que já trazem o modo escuro de graça.
+ */
+#root {
+  width: 100%;
+  max-width: none;
+  text-align: left;
+  border-inline: none;
+}
+
+/* Azul do cabeçalho das planilhas geradas pelo backend. */
+:root {
+  --marca: #173772;
+  --amarelo: #fff3cd;
+  --vermelho: #f8d7da;
+  --borda-vermelha: #dc3545;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --marca: #7ea2e0;
+  }
+}
+
+.pagina {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+  box-sizing: border-box;
+}
+
+.cabecalho h1 {
+  font-size: 2rem;
+  letter-spacing: -0.5px;
+  margin: 0 0 0.5rem;
+  color: var(--marca);
+}
+
+.cabecalho p {
+  margin: 0 0 2rem;
+}
+
+/* ---------------------------------------------------------------- form */
+
+.formulario {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--social-bg);
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.campo > label,
+.campo legend {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-h);
+  padding: 0;
+}
+
+.campo:disabled {
+  opacity: 0.55;
+}
+
+input[type='file'] {
+  font: inherit;
+  font-size: 0.95rem;
+  color: inherit;
+  max-width: 100%;
+}
+
+.opcao {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.acoes {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+button {
+  font: inherit;
+  font-size: 0.95rem;
+  padding: 0.6rem 1.4rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--marca);
+  color: #fff;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.secundario {
+  background: transparent;
+  color: var(--text-h);
+  border-color: var(--border);
+}
+
+/* ------------------------------------------------------------- avisos */
+
+.aviso {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.aviso strong {
+  color: var(--text-h);
+}
+
+.aviso.processando {
+  background: var(--amarelo);
+  border-color: #e8d9a0;
+  color: #6b5b16;
+}
+
+.aviso.processando strong {
+  color: #6b5b16;
+}
+
+.aviso.falha {
+  background: var(--vermelho);
+  border-color: var(--borda-vermelha);
+  border-left-width: 4px;
+  color: #7a2532;
+  display: block;
+}
+
+.aviso.falha strong {
+  color: #7a2532;
+}
+
+.detalhe {
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0;
+  opacity: 0.85;
+}
+
+.girando {
+  flex: none;
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 2px solid rgba(107, 91, 22, 0.25);
+  border-top-color: #6b5b16;
+  border-radius: 50%;
+  animation: girar 0.8s linear infinite;
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .girando {
+    animation-duration: 3s;
+  }
+}
+
+/* ----------------------------------------------------------- resultado */
+
+.resultado {
+  margin-top: 2rem;
+}
+
+.resultado h2 {
+  margin-bottom: 0.25rem;
+}
+
+/* -------------------------------------------------------------- tabela */
+
+.tabela-area {
+  margin-top: 1rem;
+}
+
+.resumo {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  margin-bottom: 0.6rem;
+}
+
+.etiqueta {
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+
+.etiqueta.amarelo {
+  background: var(--amarelo);
+  border-color: #e8d9a0;
+  color: #6b5b16;
+}
+
+.etiqueta.vermelho {
+  background: var(--vermelho);
+  border-color: var(--borda-vermelha);
+  color: #7a2532;
+}
+
+/* A tabela é larga (o holerite passa de 14 colunas): rola dentro da caixa
+   em vez de esticar a página. */
+.rolagem {
+  max-height: 34rem;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.tabela {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.85rem;
+  width: max-content;
+  min-width: 100%;
+}
+
+.tabela th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--marca);
+  color: #fff;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  padding: 0.5rem 0.75rem;
+}
+
+.tabela td {
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+  /* Sem fundo próprio, pra cor do destaque da linha aparecer. */
+  background: transparent;
+}
+
+.tabela input {
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  width: 100%;
+  min-width: 6.5rem;
+  box-sizing: border-box;
+  padding: 0.4rem 0.75rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.tabela input:focus {
+  outline: 2px solid var(--marca);
+  outline-offset: -2px;
+  background: var(--bg);
+}
+
+.tabela tbody tr.amarelo {
+  background: var(--amarelo);
+  color: #6b5b16;
+}
+
+.tabela tbody tr.vermelho {
+  background: var(--vermelho);
+  color: #7a2532;
+}
+
+/* A borda esquerda vermelha da primeira célula, igual à planilha. */
+.tabela tbody tr.vermelho td:first-child {
+  box-shadow: inset 3px 0 0 var(--borda-vermelha);
+}
+
+.coluna-aviso {
+  padding: 0.4rem 0.75rem;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+th.coluna-aviso {
+  background: var(--marca);
+}
