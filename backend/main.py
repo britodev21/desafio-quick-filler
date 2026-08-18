@@ -1,5 +1,6 @@
 import logging
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
@@ -18,9 +19,21 @@ from backend.extrator import processar_cartao_ponto
 from backend.extrator_holerite import processar_holerite
 from backend.planilha import GERADORES
 
+"""
+main.py e o ponto de entrada da aplicacao, entao e aqui que o logging se
+configura. Sem isso o uvicorn deixa o logger raiz em WARNING e todo INFO
+nosso e descartado em silencio.
+
+INFO e nao DEBUG de proposito: o DEBUG do logger raiz liga junto o do
+pdfminer, que despeja megabytes de log do parser a cada PDF lido.
+"""
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s [%(name)s] %(message)s",
+)
+
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
 transcricoes = {}
 
 # Caminho a partir do arquivo, e nao do cwd, pra funcionar rodando de
@@ -61,6 +74,58 @@ MENSAGEM_ERRO = (
     "Não foi possível extrair os dados deste documento. "
     "Verifique se o PDF corresponde ao tipo informado."
 )
+
+
+def limpar_diretorio(diretorio):
+    """
+    Apaga os arquivos soltos do diretorio e devolve quantos sairam.
+
+    Um arquivo travado nao derruba a subida: vira aviso no log e a aplicacao
+    segue. Nao lista nome de arquivo em log nenhum.
+    """
+    removidos = 0
+    falhas = 0
+
+    for caminho in diretorio.iterdir():
+        if not caminho.is_file():
+            continue
+
+        try:
+            caminho.unlink()
+            removidos += 1
+        except OSError:
+            falhas += 1
+
+    if falhas:
+        logger.warning(
+            "limpeza de %s/: %s arquivos nao puderam ser removidos",
+            diretorio.name,
+            falhas,
+        )
+
+    return removidos
+
+
+@asynccontextmanager
+async def ciclo_de_vida(app):
+    """
+    Na subida, esvazia uploads/ e planilhas/.
+
+    transcricoes nasce vazio a cada inicio, entao qualquer arquivo que tenha
+    sobrado de uma execucao anterior e orfao: nao existe id que o referencie e
+    nenhuma rota vai servi-lo de novo.
+    """
+    for diretorio in (DIRETORIO_UPLOADS, DIRETORIO_PLANILHAS):
+        logger.info(
+            "limpeza de inicio: %s arquivos removidos de %s/",
+            limpar_diretorio(diretorio),
+            diretorio.name,
+        )
+
+    yield
+
+
+app = FastAPI(lifespan=ciclo_de_vida)
 
 
 def processar_documento(id_transcricao: str, caminho_pdf: Path, tipo: str):

@@ -317,6 +317,33 @@
   e some no restart, depois de reiniciar sobravam documentos com CPF e salário
   em disco sem nenhum id que os
 
+
+**Limpeza na subida**
+- Ao iniciar, a aplicação apaga tudo de `uploads/` e `planilhas/`. Como
+  `transcricoes` nasce vazio a cada início, qualquer arquivo que estivesse lá
+  é órfão sem id que o referencie.
+- Isso resolve a retenção infinita sem quebrar a tela de revisão: o PDF
+  sobrevive durante a sessão e some no restart. No Render free, que dorme por
+  inatividade, isso vira limpeza automática a cada ciclo.
+- Usei `lifespan` em vez de `@app.on_event("startup")`, que está depreciado
+  nesta versão do FastAPI.
+
+**Bug encontrado no teste**
+- A primeira versão limpava certo mas não logava nada. O uvicorn configura
+  apenas os loggers dele e deixa o raiz em WARNING, então o `logger.info` era
+  descartado em silêncio. O requisito de logar estava implementado e
+  praticamente inexistente.
+- Corrigido com `basicConfig(level=INFO)` no `main.py`. Nível INFO e não DEBUG
+  de propósito: DEBUG no raiz ligaria junto o do `pdfminer`, o mesmo despejo de
+  megabytes que apareceu quando trocamos os prints dos extratores.
+
+**Detalhes de robustez**
+- Arquivo travado por outro processo é contado à parte e vira aviso, sem
+  derrubar a subida. Um xlsx aberto no Excel não deve impedir o servidor de
+  iniciar.
+- Subpastas não são tocadas.
+
+
 ## Cite 3 decisões em que havia mais de uma resposta razoável. Por que escolheu essa?
 
 ## O que na sua solução quebra primeiro em produção?
