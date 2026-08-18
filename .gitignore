@@ -1,6 +1,9 @@
 # PDFs enviados pela API em tempo de execução (documentos de terceiros)
 uploads/
 
+# Planilhas geradas pela rota de download em tempo de execução
+planilhas/
+
 # Ferramentas internas de correção (não publicar)
 avaliacao/
 

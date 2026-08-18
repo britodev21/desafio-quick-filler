@@ -11,10 +11,12 @@ from fastapi import (
     HTTPException,
     UploadFile,
 )
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from backend.extrator import processar_cartao_ponto
 from backend.extrator_holerite import processar_holerite
+from backend.planilha import GERADORES
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,21 @@ DIRETORIO_UPLOADS.mkdir(parents=True, exist_ok=True)
 
 # Todo PDF comeca com esses bytes. A extensao do nome nao prova nada.
 ASSINATURA_PDF = b"%PDF"
+
+# Planilhas geradas. Separado de saidas/, que guarda os entregaveis do
+# desafio: aqui e artefato de execucao, um arquivo por transcricao.
+DIRETORIO_PLANILHAS = Path(__file__).resolve().parent.parent / "planilhas"
+DIRETORIO_PLANILHAS.mkdir(parents=True, exist_ok=True)
+
+# Fonte unica da verdade: valida o formato pedido e da o Content-Type.
+TIPOS_DE_MIDIA = {
+    "xlsx": (
+        "application/vnd.openxmlformats-officedocument"
+        ".spreadsheetml.sheet"
+    ),
+    "csv": "text/csv; charset=utf-8",
+    "json": "application/json",
+}
 
 # Fonte unica da verdade: valida o tipo recebido e escolhe o extrator.
 EXTRATORES = {
@@ -101,9 +118,51 @@ def put_transcricao(id: str, correcao: Correcao):
 
 @app.get("/api/transcricoes/{id}/planilha")
 def get_planilha(id: str, formato: str = "xlsx"):
-    return {"id": id,
-            "planilha": f"planilha.{formato}"
-}
+    if id not in transcricoes:
+        raise HTTPException(status_code=404, detail="Transcrição não encontrada")
+
+    transcricao = transcricoes[id]
+
+    if transcricao["status"] != "concluido":
+        """
+        409 e nao 404: a transcricao existe, o que nao da e gerar planilha de
+        um documento que ainda esta processando ou que falhou.
+        """
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "A transcrição ainda não está pronta "
+                f"(status: {transcricao['status']})."
+            ),
+        )
+
+    if formato not in TIPOS_DE_MIDIA:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Formato inválido. Use um destes: "
+                f"{', '.join(TIPOS_DE_MIDIA)}."
+            ),
+        )
+
+    gerador = GERADORES[transcricao["tipo"]][formato]
+
+    """
+    Gera do value atual, que e o corrigido quando houve PUT - o contrato pede
+    a planilha ja com as correcoes aplicadas.
+
+    O nome do arquivo leva o id pra dois pedidos de transcricoes diferentes
+    nao brigarem pelo mesmo arquivo em disco.
+    """
+    caminho = DIRETORIO_PLANILHAS / f"{id}.{formato}"
+    gerador(transcricao["value"], str(caminho))
+
+    return FileResponse(
+        path=caminho,
+        media_type=TIPOS_DE_MIDIA[formato],
+        # Em disco vale o id; pro usuario, um nome que diz o que e.
+        filename=f"{transcricao['tipo']}-{id[:8]}.{formato}",
+    )
 
 @app.post("/api/transcricoes", status_code=202)
 async def criar_transcricao(
