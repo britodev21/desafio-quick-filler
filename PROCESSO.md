@@ -277,10 +277,45 @@
 - JSON recarregado idêntico ao `value` de origem.
 - BOM presente e acentuação sobrevivendo à ida e volta.
 
-**Risco apontado e ainda aberto**
-- Gravar a planilha com nome fixo dá conflito: dois pedidos simultâneos, ou o
-  arquivo aberto no Excel, resultam em erro de permissão. Aconteceu comigo
-  durante o teste. A rota de download precisa usar o id da transcrição no nome.
+**Risco apontado e resolvido**
+- Gravar a planilha com nome fixo dava conflito: dois pedidos simultâneos, ou
+  o arquivo aberto no Excel, resultavam em erro de permissão. Aconteceu comigo
+  durante o teste da geração de CSV.
+- Resolvido na rota de download, que grava usando o id da transcrição no nome.
+- Continua aberto o caso de dois downloads simultâneos do mesmo id e formato,
+  que ainda escreveriam o mesmo arquivo. Gravar num temporário e renomear
+  resolveria.
+
+**Rota de download**
+- Gera a planilha a partir do `value` atual da transcrição, que é o corrigido
+  se houve PUT. É isso que faz a correção chegar na planilha.
+- Escolhe o gerador num dicionário indexado por tipo e formato, sem `if` por
+  formato.
+- Grava com o id no nome do arquivo, para dois pedidos simultâneos não
+  escreverem o mesmo arquivo.
+
+**Decisão: 409 para transcrição ainda não pronta**
+- Usei 409 e não 404 nem 400. A transcrição existe, o problema é o estado.
+  404 diria que o recurso não existe, e 400 culparia o pedido, que está correto.
+- O mesmo 409 cobre `status: erro`, com a mensagem dizendo qual dos dois casos é.
+- O README não fixa código para essa situação, então é decisão minha.
+
+**Decisão: ordem das validações**
+- Valido na ordem id, status, formato. Efeito colateral: pedir um formato
+  inválido de uma transcrição ainda processando devolve 409, não 400, mesmo o
+  formato sendo permanentemente inválido.
+- Se o erro permanente devesse ganhar, é mover um bloco.
+
+**Decisão: separar `planilhas/` de `saidas/`**
+- `saidas/` guarda as planilhas geradas dos exemplos, que são entregável e vão
+  para o repositório.
+- `planilhas/` guarda o que a aplicação gera em execução, a partir de documento
+  de terceiro, e fica no `.gitignore`.
+
+**Retenção**
+- Os PDFs ficavam em `uploads/` indefinidamente. Como `transcricoes` é memória
+  e some no restart, depois de reiniciar sobravam documentos com CPF e salário
+  em disco sem nenhum id que os
 
 ## Cite 3 decisões em que havia mais de uma resposta razoável. Por que escolheu essa?
 
