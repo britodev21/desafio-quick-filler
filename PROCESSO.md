@@ -446,6 +446,81 @@
   `docker compose up --build` sobe, a interface carrega e o ciclo completo
   funciona dentro do container.
 
+  ---
+
+## OCR
+
+**Detecção**
+- Uma página precisa de OCR quando tem menos de 200 caracteres extraíveis, não
+  quando tem zero. O `payroll-04` tem 83 caracteres por página que são só o
+  carimbo de assinatura eletrônica sobreposto à imagem, e uma checagem ingênua
+  de "tem texto?" o classificaria como legível.
+- Isso corrige o que o `checar.py` do dia 1 me disse. Ele reportou os quatro
+  holerites como TEXTO, e o `payroll-04` na verdade é imagem.
+
+**Onde o OCR entra**
+- Num módulo separado que é a fonte única de texto. Os extratores receberam
+  uma lista de strings e não sabem se veio da camada nativa ou do Tesseract.
+
+**Decisão: limiar de confiança em 60**
+- Escolhi medindo, não por convenção. A distribuição de confiança do
+  `time-card-02` é bimodal: 83% das palavras entre 90 e 99, e a cauda baixa
+  some rápido. O vale está entre 50 e 69, então 60 corta no ponto mais raro.
+- Validei contra o que importa: os 40 horários da página têm confiança mínima
+  88 e mediana 92. Com limiar 60 nenhum horário é marcado à toa, e a marcação
+  cai sobre lixo de OCR.
+- Subir para 75 marcaria valores corretos; subir para 90 marcaria horários bons.
+  Marcar demais é tão nocivo quanto marcar de menos: enche o documento de `?`
+  que o revisor precisa conferir à mão.
+
+**Decisão: confiança por palavra, `?` por caractere**
+- O Tesseract dá confiança por palavra e o contrato pede `?` por caractere.
+  Quando ele diz "10:35, confiança 42", nada indica qual dígito é o duvidoso.
+- Não marcar nada entregaria palpite com cara de leitura firme, que é o erro
+  que o `?` existe para evitar. Trocar a palavra inteira por `?????` apagaria
+  a estrutura, e sumiria até a informação de que ali havia um horário.
+- Escolhi trocar os caracteres de conteúdo e preservar a pontuação: `10:35`
+  vira `??:??`. Os dois pontos não vêm de reconhecer um glifo duvidoso, vêm da
+  forma do campo, e mantê-los deixa visível o que se perdeu.
+
+**O OCR funcionou, mas não era a última barreira**
+- O texto do `time-card-02` sai limpo, e mesmo assim o extrator devolvia zero
+  batidas. O layout é outro: onde o `time-card-01` escreve `1 - DOM`, ele
+  escreve `01 SAB`, sem o traço.
+- Levantando os três arquivos, achei cinco formas de escrever a linha do dia:
+  `1 - DOM`, `01 SAB`, `11TER` colado, `?? TER` com o dia ilegível, e a data
+  completa `16/12/2019 SEG`.
+
+**Bug encontrado no teste**
+- O padrão usava `\b` no fim da sigla, mas `?` não é caractere de palavra,
+  então linhas como `?? ??? Sem Registro` escapavam. Justamente os dias
+  ilegíveis, que são os que mais importam sinalizar. Trocado por `(?=\s|$)`,
+  o que recuperou 6 dias.
+- E a regra do dia repetido precisou de ajuste: dois `??` seguidos são dias
+  diferentes que o OCR não leu, então dia incerto nunca conta como repetição.
+
+**O que o agente fez além do pedido, e por quê aceitei**
+- Pedi só a flexibilização do padrão de dia. Ele também ajustou o descarte da
+  coluna Jornada e o tratamento do traço entre horários.
+- Aceitei porque a mudança sozinha teria produzido "152 dias, 81 batidas" com
+  metade dos dados faltando. O `time-card-02` não tem coluna Jornada, então o
+  extrator descartava a entrada real; e o parsing parava no hífen de
+  `12:00 - 18:15`, perdendo todas as saídas. Erro apresentado como sucesso é
+  pior que a falha honesta anterior.
+
+**Limitação conhecida: ordem das batidas no time-card-02**
+- Nesse layout a coluna Intervalo vem depois de Entrada e Saída, então as
+  batidas saem na ordem do papel mas não em ordem cronológica. O `kind`
+  alternado acaba rotulando o início do intervalo como entrada.
+- Mantive a ordem do documento porque é o que o contrato pede explicitamente.
+  Corrigir exigiria interpretar o significado de cada coluna, que é decisão de
+  produto e não de parsing.
+
+**Custo do OCR**
+- Entre 5 e 30 segundos por página, contra 1 segundo por página no caminho
+  nativo. O render a 300 DPI é o que domina. Reduzir para 200 DPI ou escala de
+  cinza é o caminho para acelerar, mas muda a qualidade da leitura.
+
 ## Cite 3 decisões em que havia mais de uma resposta razoável. Por que escolheu essa?
 
 ## O que na sua solução quebra primeiro em produção?

@@ -2,7 +2,7 @@ import logging
 import re
 from itertools import pairwise
 
-import pdfplumber
+from backend.ocr import extrair_textos
 
 logger = logging.getLogger(__name__)
 
@@ -304,8 +304,9 @@ def conferir_competencias_consecutivas(pages):
 def processar_holerite(caminho_pdf):
     logger.debug("iniciando a leitura de %s...", caminho_pdf)
 
-    with pdfplumber.open(caminho_pdf) as pdf:
-        textos = [pagina.extract_text() or "" for pagina in pdf.pages]
+    # Uma string por pagina. Quem decide se ela veio da camada de texto ou do
+    # OCR e o modulo ocr; daqui pra baixo as duas origens sao a mesma coisa.
+    textos = extrair_textos(caminho_pdf)
 
     logger.debug("O PDF tem %s paginas.", len(textos))
 

@@ -2,12 +2,46 @@ import json
 import logging
 import re
 
-import pdfplumber
+from backend.ocr import extrair_textos
 
 logger = logging.getLogger(__name__)
 
-# "1 - DOM", "9 - FER", "31 - TER" -> comeco de um dia novo.
-PADRAO_DIA = re.compile(r"^(\d{1,2})\s*-\s*([A-Z]{3})\b")
+"""
+Comeco de um dia novo. Sao duas formas porque os sistemas imprimem o cartao
+de dois jeitos, e as duas aparecem nos documentos reais:
+
+  "1 - DOM"        dia do mes + sigla da semana, com traco
+  "01 SAB"         o mesmo, separado por espaco
+  "11TER"          o mesmo, sem separador nenhum
+  "16/12/2019 SEG" a data completa ja na linha
+
+O separador do formato curto e opcional (\\s*-?\\s*) de proposito: mudar de
+"1 - DOM" pra "01 SAB" e so o sistema que imprime, e o OCR ainda pode comer o
+espaco e devolver "11TER" grudado. Exigir o traco descartava o dia inteiro.
+
+O "?" entra nos dois lados porque e a marca de caractere que o OCR nao leu:
+"?? TER" e um dia real do documento, com o numero ilegivel, e vale mais
+listado com a data incerta do que sumindo da planilha.
+
+O fim da sigla e marcado com (?=\\s|$), e nao com \\b: a semana ilegivel sai
+"???", e "?" nao e caractere de palavra, entao \\b nao enxerga fronteira
+nenhuma depois dela - e a linha "?? ??? Sem Registro", um dia inteiro, caia
+fora justamente por estar ilegivel.
+"""
+PADRAO_DIA_DATA = re.compile(
+    r"^([\d?]{2}/[\d?]{2}/[\d?]{4})\s*[^\w\s]{0,2}\s*([A-Z?]{3})(?=\s|$)"
+)
+PADRAO_DIA_CURTO = re.compile(r"^([\d?]{1,2})\s*-?\s*([A-Z?]{3})(?=\s|$)")
+
+"""
+Nome da coluna que traz a jornada contratada, e nao uma batida.
+
+Quando ela existe, o primeiro horario da linha e a jornada ("08:00") e precisa
+sair; quando nao existe, esse mesmo primeiro horario e a entrada do dia. Quem
+decide e o cabecalho da tabela, nao o formato da linha - por isso o nome vive
+aqui e a decisao acontece em processar_pagina.
+"""
+COLUNA_JORNADA = "Jornada"
 
 # Linha de continuacao sempre COMECA com um horario ("14:35 18:36 ...").
 PADRAO_CONTINUACAO = re.compile(r"^\d{1,2}:\d{2}\b")
@@ -16,12 +50,56 @@ PADRAO_CONTINUACAO = re.compile(r"^\d{1,2}:\d{2}\b")
 # por isso quem separa batida de nao-batida e a POSICAO, nao o formato.
 PADRAO_TOKEN_HORARIO = re.compile(r"^\d{1,2}:\d{2}$")
 
-# "Mes/Ano : 7 / 2012" no topo de cada pagina. Cada pagina e um mes.
-PADRAO_MES_ANO = re.compile(r"Mes/Ano\s*:\s*(\d{1,2})\s*/\s*(\d{4})")
+"""
+"Mes/Ano : 7 / 2012" no topo de cada pagina. Cada pagina e um mes.
+
+O \\w no lugar do "e" cobre o "Mes" e o "Mês" sem depender do acento, igual o
+PADRAO_PERIODO do holerite faz com "Periodo". Sem isso a competencia se perde
+e a data do dia sai "17/??/????" numa pagina que traz o mes escrito.
+"""
+PADRAO_MES_ANO = re.compile(r"M\ws/Ano\s*:\s*(\d{1,2})\s*/\s*(\d{4})")
+
+"""
+Traco solto entre dois horarios ("12:00 - 18:15").
+
+Parte dos modelos liga entrada e saida com traco em vez de espaco. Ele nao e
+batida nem abre a coluna de ocorrencia: e so pontuacao, e precisa ser pulado
+pra que a saida do dia nao fique pra tras. Sao tres grafias porque o OCR
+devolve tanto o hifen quanto os travessoes.
+"""
+SEPARADORES_DE_HORARIO = ("-", "—", "–")
 
 DIA_NOVO = "DIA_NOVO"
 CONTINUACAO = "CONTINUACAO"
 LIXO = "LIXO"
+
+
+def casar_dia(linha):
+    """
+    Reconhece o cabecalho de dia da linha, em qualquer uma das formas.
+
+    Devolve (data_completa, dia, fim_do_prefixo) ou None quando a linha nao
+    abre dia. data_completa vem None no formato curto, em que a linha so traz
+    o numero do dia e o mes/ano fica no topo da pagina.
+
+    Tenta a data completa primeiro: "16/12/2019 SEG" tambem comeca com dois
+    digitos, e o formato curto morderia so o "16" se viesse antes.
+
+    O dia sai como string, e nao int, pelo mesmo motivo que o normalizar_hhmm
+    usa zfill: "??" e um dia legitimo, com o numero ilegivel, e int("??")
+    estouraria.
+    """
+    casamento = PADRAO_DIA_DATA.match(linha)
+
+    if casamento:
+        return casamento.group(1), casamento.group(1), casamento.end()
+
+    casamento = PADRAO_DIA_CURTO.match(linha)
+
+    if casamento:
+        return None, casamento.group(1), casamento.end()
+
+    return None
 
 
 def classificar_linhas(linhas):
@@ -39,17 +117,21 @@ def classificar_linhas(linhas):
         if not linha:
             continue
 
-        casamento = PADRAO_DIA.match(linha)
+        casamento = casar_dia(linha)
 
         if casamento:
-            dia = int(casamento.group(1))
+            _data, dia, _fim = casamento
 
             """
             Pegadinha do PDF: as vezes ele repete o cabecalho do dia numa linha
             que na verdade e continuacao (ex: "17 - TER" aparece duas vezes
             seguidas). Se o numero e o mesmo do dia anterior, nao e dia novo.
+
+            Dia ilegivel nunca entra nessa regra: dois "??" seguidos sao dois
+            dias diferentes que o OCR nao leu (num dos exemplos, 12 e 13), e
+            trata-los como repeticao fundiria os dois numa linha so.
             """
-            if dia == ultimo_dia:
+            if dia == ultimo_dia and "?" not in dia:
                 classificadas.append((CONTINUACAO, linha))
             else:
                 ultimo_dia = dia
@@ -66,19 +148,25 @@ def classificar_linhas(linhas):
     return classificadas
 
 
-def extrair_batidas(linha):
+def extrair_batidas(linha, tem_jornada):
     """
     Devolve so as batidas de uma linha da tabela, como lista de "HH:MM".
 
     Descarta:
-      - o prefixo do dia ("17 - TER");
-      - a coluna Jornada, que e o primeiro horario depois do dia da semana;
+      - o prefixo do dia ("17 - TER", "16/12/2019 SEG");
+      - a coluna Jornada, quando a tabela tem essa coluna;
       - a coluna Ocorrencia e a Qtde que vem depois dela.
-    """
-    tem_cabecalho_do_dia = bool(PADRAO_DIA.match(linha))
 
-    if tem_cabecalho_do_dia:
-        resto = PADRAO_DIA.sub("", linha).strip()
+    tem_jornada vem do cabecalho da pagina. Nao da pra decidir isso olhando a
+    linha: "1 - DOM 08:00 09:03" e "17 SEG 12:00 - 18:15" tem a mesma cara, e
+    o primeiro horario e jornada num caso e entrada no outro. Descartar sempre
+    comeria a entrada de todo dia das tabelas sem Jornada.
+    """
+    casamento = casar_dia(linha)
+
+    if casamento:
+        _data, _dia, fim = casamento
+        resto = linha[fim:].strip()
     else:
         resto = linha
 
@@ -86,15 +174,21 @@ def extrair_batidas(linha):
     for token in resto.split():
         if PADRAO_TOKEN_HORARIO.match(token):
             horarios.append(token)
+        elif token in SEPARADORES_DE_HORARIO:
+            # Pontuacao entre entrada e saida, nao fim da regiao de batidas.
+            continue
         else:
             """
             O primeiro token que nao e horario abre a coluna Ocorrencia
             ("HE-BCO DE HORAS", "HE-REMUNERADA", "HE COMPENSADA"). Dali pra
             frente sobra so ocorrencia + Qtde, e nenhum dos dois e batida.
+
+            O traco solto ja saiu no ramo de cima; "HE-BCO" continua parando
+            aqui, porque o traco dele vem grudado na palavra.
             """
             break
 
-    if tem_cabecalho_do_dia and horarios:
+    if casamento and tem_jornada and horarios:
         # Vale tanto pra DIA_NOVO quanto pra continuacao que repete o
         # cabecalho (dias 17 e 27): o 08:00 dali e Jornada.
         horarios = horarios[1:]
@@ -102,10 +196,10 @@ def extrair_batidas(linha):
     return horarios
 
 
-def agrupar_batidas_por_dia(classificadas):
+def agrupar_batidas_por_dia(classificadas, tem_jornada):
     """
     Junta cada DIA_NOVO com as CONTINUACAO que vem depois dele.
-    Devolve lista de dicts: {"dia": int, "semana": str, "batidas": [...]}.
+    Devolve lista de dicts: {"dia": str, "data": str|None, "batidas": [...]}.
     """
     dias = []
 
@@ -114,18 +208,14 @@ def agrupar_batidas_por_dia(classificadas):
             continue
 
         if tipo == DIA_NOVO:
-            casamento = PADRAO_DIA.match(linha)
-            dias.append({
-                "dia": int(casamento.group(1)),
-                "semana": casamento.group(2),
-                "batidas": [],
-            })
+            data, dia, _fim = casar_dia(linha)
+            dias.append({"dia": dia, "data": data, "batidas": []})
 
         if not dias:
             # Continuacao solta antes de qualquer dia: nao tem onde encaixar.
             continue
 
-        dias[-1]["batidas"].extend(extrair_batidas(linha))
+        dias[-1]["batidas"].extend(extrair_batidas(linha, tem_jornada))
 
     return dias
 
@@ -163,15 +253,25 @@ def montar_json_pagina(resultado):
     """
     Monta o {"page": N, "days": [...]} de uma pagina ja processada.
 
-    A data completa nunca aparece na linha do dia: a linha traz so "1 - DOM" e
-    o mes/ano fica no cabecalho da pagina. Por isso date_raw e montado juntando
-    os dois, com zero a esquerda no dia.
+    Quando a linha traz so "1 - DOM", a data completa nao existe nela: o
+    mes/ano fica no cabecalho da pagina e o date_raw e montado juntando os
+    dois, com zero a esquerda no dia. Quando a linha ja vem com a data inteira
+    ("16/12/2019 SEG"), ela e usada como esta - o cabecalho nao acrescenta
+    nada, e remontar so criaria chance de divergir do documento.
+
+    O zfill no lugar de :02 e o mesmo motivo do normalizar_hhmm: dia ilegivel
+    chega como "??" e precisa sair "??", nao estourar.
     """
     days = []
 
     for registro in resultado["dias"]:
+        if registro["data"]:
+            date_raw = registro["data"]
+        else:
+            date_raw = f"{registro['dia'].zfill(2)}/{resultado['mes_ano']}"
+
         days.append({
-            "date_raw": f"{registro['dia']:02}/{resultado['mes_ano']}",
+            "date_raw": date_raw,
             "punches": montar_punches(registro["batidas"]),
         })
 
@@ -217,6 +317,10 @@ def processar_pagina(texto_bruto):
     if indice_inicio_tabela is None:
         return None
 
+    # A coluna Jornada existe em parte dos modelos e muda o que e a primeira
+    # batida do dia, entao a resposta sai do cabecalho desta pagina.
+    tem_jornada = COLUNA_JORNADA in linhas[indice_inicio_tabela]
+
     linhas_tabela = linhas[indice_inicio_tabela + 1:]
     classificadas = classificar_linhas(linhas_tabela)
 
@@ -224,7 +328,7 @@ def processar_pagina(texto_bruto):
     for tipo, _linha in classificadas:
         contagem[tipo] += 1
 
-    dias = agrupar_batidas_por_dia(classificadas)
+    dias = agrupar_batidas_por_dia(classificadas, tem_jornada)
 
     return {
         "mes_ano": extrair_mes_ano(linhas[:indice_inicio_tabela]),
@@ -239,8 +343,9 @@ def processar_pagina(texto_bruto):
 def processar_cartao_ponto(caminho_pdf):
     logger.debug("iniciando a leitura do PDF...")
 
-    with pdfplumber.open(caminho_pdf) as pdf:
-        textos = [pagina.extract_text() or "" for pagina in pdf.pages]
+    # Uma string por pagina. Quem decide se ela veio da camada de texto ou do
+    # OCR e o modulo ocr; daqui pra baixo as duas origens sao a mesma coisa.
+    textos = extrair_textos(caminho_pdf)
 
     logger.debug("O PDF tem %s paginas.", len(textos))
 

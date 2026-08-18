@@ -27,6 +27,13 @@ sys.path.insert(0, str(RAIZ))
 
 from backend.extrator import processar_cartao_ponto  # noqa: E402
 from backend.extrator_holerite import processar_holerite  # noqa: E402
+from backend.ocr import (  # noqa: E402
+    LIMIAR_TEXTO_UTIL,
+    OCRIndisponivel,
+    precisa_de_ocr,
+    renderizar_paginas,
+    texto_da_imagem,
+)
 from backend.planilha import GERADORES  # noqa: E402
 
 DIRETORIO_EXEMPLOS = RAIZ / "exemplos"
@@ -63,19 +70,6 @@ MARCAS = {
 
 OK = "OK"
 FALHOU = "FALHOU"
-
-"""
-Minimo de caracteres pra considerar que uma pagina tem texto de verdade.
-
-PDF escaneado que passou por processo judicial costuma vir com uma tarja de
-texto por cima ("Assinado eletronicamente por: ... - Juntado em: ..."), entao
-"tem texto" e "da pra ler o documento" nao sao a mesma coisa: o payroll-04
-devolve 83 caracteres por pagina, todos da tarja, e o resto e imagem.
-
-200 fica bem no meio da separacao medida nos exemplos: a tarja da 83 e a
-pagina mais pobre com conteudo de verdade da 885.
-"""
-LIMIAR_TEXTO_UTIL = 200
 
 
 def descobrir_tipo_pelo_nome(caminho_pdf):
@@ -115,23 +109,15 @@ def descobrir_tipo_pelo_conteudo(caminho_pdf):
     return None
 
 
-def medir_texto(caminho_pdf):
+def ler_textos_nativos(caminho_pdf):
     """
-    Devolve (total de paginas, paginas com texto util, maior pagina em chars).
+    Texto da camada nativa do PDF, sem passar pelo OCR.
 
-    So e chamado quando a extracao nao rendeu nada, pra separar "PDF e imagem"
-    de "PDF tem texto mas o layout nao foi reconhecido". Sao motivos
-    diferentes e levam a solucoes diferentes: um pede OCR, o outro pede mexer
-    no extrator.
+    Serve so pra comparar com o texto final e saber quais paginas o OCR
+    precisou reescrever - o extrator, esse, recebe as duas origens iguais.
     """
     with pdfplumber.open(caminho_pdf) as pdf:
-        tamanhos = [
-            len((pagina.extract_text() or "").strip()) for pagina in pdf.pages
-        ]
-
-    uteis = sum(1 for tamanho in tamanhos if tamanho >= LIMIAR_TEXTO_UTIL)
-
-    return len(tamanhos), uteis, max(tamanhos, default=0)
+        return [pagina.extract_text() or "" for pagina in pdf.pages]
 
 
 def medir_extracao(tipo, dados):
@@ -164,39 +150,57 @@ def explicar_extracao_vazia(caminho_pdf, tipo):
     o que fazer: falta de OCR e layout desconhecido tem causas distintas.
     """
     try:
-        total, uteis, maior = medir_texto(caminho_pdf)
+        nativos = ler_textos_nativos(caminho_pdf)
     except Exception as erro:
         return f"não extraiu nada e o PDF não pôde ser reaberto: {erro}"
 
-    if maior == 0:
+    total = len(nativos)
+    pendentes = [
+        numero for numero, texto in enumerate(nativos)
+        if precisa_de_ocr(texto)
+    ]
+
+    if not pendentes:
         return (
-            f"PDF sem camada de texto ({total} páginas, todas imagem): "
-            "precisa passar por OCR, que ainda não está no pipeline"
+            f"o PDF tem texto nas {total} páginas, mas o extrator de {tipo} "
+            "não reconheceu a tabela: layout diferente do esperado"
         )
 
-    if uteis == 0:
-        """
-        Tem texto, mas pouco demais pra ser o documento. Chamar isso de
-        "layout nao reconhecido" mandaria alguem depurar o extrator quando o
-        que falta e OCR.
-        """
+    """
+    Refaz o OCR de UMA pagina, e nao das que o extrator ja passou.
+
+    O extrator nao guarda o texto que leu, entao pra saber se o OCR rendeu
+    alguma coisa e preciso repetir o trabalho - e repetir o arquivo inteiro
+    dobra o custo do lote a troco de nada. Uma pagina ja responde a pergunta
+    que interessa aqui: o texto saiu ou nao saiu.
+    """
+    amostra = pendentes[0]
+
+    try:
+        imagens = renderizar_paginas(caminho_pdf, [amostra])
+        texto, _palavras, _incertas = texto_da_imagem(imagens[amostra])
+    except OCRIndisponivel as erro:
+        return f"as páginas são imagem e o OCR não pôde rodar: {erro}"
+    except Exception as erro:
+        return f"as páginas são imagem e o OCR falhou: {erro}"
+
+    if precisa_de_ocr(texto):
         return (
-            f"PDF é imagem com uma tarja de texto por cima (no máximo {maior} "
-            f"caracteres por página, contra as {LIMIAR_TEXTO_UTIL} que um "
-            "documento legível teria): o conteúdo está na imagem e precisa "
-            "de OCR"
+            f"{len(pendentes)} de {total} páginas são imagem e nem o OCR "
+            f"rendeu texto legível (a página {amostra + 1} deu {len(texto)} "
+            f"caracteres, contra os {LIMIAR_TEXTO_UTIL} de um documento "
+            "legível): imagem ilegível ou página em branco"
         )
 
-    if uteis < total:
-        return (
-            f"o extrator de {tipo} não encontrou dado em nenhuma página "
-            f"(só {uteis} de {total} páginas têm texto legível; as demais "
-            "são imagem e precisam de OCR)"
-        )
-
+    """
+    O texto existe - o OCR entregou -, entao o que falta nao e OCR: e o
+    extrator entender este layout. Dizer "precisa de OCR" aqui mandaria
+    alguem mexer justamente na parte que ja esta funcionando.
+    """
     return (
-        f"o PDF tem texto nas {total} páginas, mas o extrator de {tipo} não "
-        "reconheceu a tabela: layout diferente do esperado"
+        f"o OCR leu {len(pendentes)} de {total} páginas (a {amostra + 1} "
+        f"rendeu {len(texto)} caracteres), mas o extrator de {tipo} não achou "
+        "dado nenhum: o texto saiu, o formato da tabela é que é outro"
     )
 
 
