@@ -1,7 +1,10 @@
+import logging
 import re
 from itertools import pairwise
 
 import pdfplumber
+
+logger = logging.getLogger(__name__)
 
 CABECALHO = "CABECALHO"
 VERBA = "VERBA"
@@ -299,12 +302,12 @@ def conferir_competencias_consecutivas(pages):
 
 
 def processar_holerite(caminho_pdf):
-    print(f"iniciando a leitura de {caminho_pdf}...")
+    logger.debug("iniciando a leitura de %s...", caminho_pdf)
 
     with pdfplumber.open(caminho_pdf) as pdf:
         textos = [pagina.extract_text() or "" for pagina in pdf.pages]
 
-    print(f"-> O PDF tem {len(textos)} paginas.\n")
+    logger.debug("O PDF tem %s paginas.", len(textos))
 
     pages = []
 
@@ -312,25 +315,43 @@ def processar_holerite(caminho_pdf):
         pagina = processar_pagina(texto_bruto, numero)
         pages.append(pagina)
 
-        print(
-            f"Pagina {numero}: competencia {competencia_da_pagina(pagina)}, "
-            f"{len(pagina['fields'])} fields, {len(pagina['bases'])} bases"
+        logger.debug(
+            "Pagina %s: competencia %s, %s fields, %s bases",
+            numero,
+            competencia_da_pagina(pagina),
+            len(pagina["fields"]),
+            len(pagina["bases"]),
         )
 
         if not pagina["fields"]:
-            print("  (sem tabela de verbas: entra na saida vazia)")
+            logger.debug(
+                "Pagina %s: sem tabela de verbas, entra na saida vazia",
+                numero,
+            )
 
     competencias = [competencia_da_pagina(p) for p in pages]
     consecutivas, buracos = conferir_competencias_consecutivas(pages)
 
-    print("\n--- Competencias ---")
-    print(" -> ".join(competencias))
-    print(f"Consecutivas: {'sim' if consecutivas else f'nao, {buracos}'}")
+    logger.debug("Competencias: %s", " -> ".join(competencias))
+
+    if consecutivas:
+        logger.debug("Competencias consecutivas: sim")
+    else:
+        logger.debug("Competencias nao consecutivas, buracos: %s", buracos)
 
     return {"pages": pages}
 
 
 # Teste:
 if __name__ == "__main__":
+    """
+    So na execucao direta: liga o DEBUG deste modulo pra continuar vendo o
+    passo a passo. Nao da pra usar basicConfig(level=DEBUG) porque isso liga o
+    DEBUG do logger raiz, e ai o pdfminer despeja megabytes de log do parser.
+    Rodando pela API, quem manda no nivel de log e o servidor.
+    """
+    logging.basicConfig(format="%(message)s")
+    logger.setLevel(logging.DEBUG)
+
     caminho_teste = "../exemplos/payroll-03.pdf"
     saida = processar_holerite(caminho_teste)

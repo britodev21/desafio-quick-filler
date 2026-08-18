@@ -176,10 +176,21 @@ Ainda não decidi o que fazer com 1, 2 e 4 — decidir no dia 3.
 - Decisão pendente: tratar "nenhuma página com dado" como erro. Precisa
   responder antes se um documento legitimamente vazio existe.
 
-**Pendências**
-- O PUT ainda não guarda a correção
-- Os `print` dos extratores vão para o log do servidor a cada upload:
-  barulhento e potencialmente vaza conteúdo de documento no log
+**PUT guardando a correção**
+- O PUT recebia a correção e devolvia sem guardar. Sem isso, a planilha sairia sempre com a transcrição original e a correção da pessoa se perderia, e "a correção chega na planilha?" é critério explícito da avaliação.
+- Adicionei a checagem de id inexistente (404, mesmo padrão do GET) e a linha que substitui o `value` da transcrição pelo que chegou.
+- O contrato diz "substitui", não "mescla": o front manda a versão completa corrigida.
+
+**Logs sem PII**
+- Os extratores imprimiam batidas, datas e valores no log a cada upload. São dados de pessoas reais, e "sem PII nos logs" é requisito explícito.
+- Troquei os `print` dentro das funções por `logger.debug`, usando `%s` em vez de f-string: assim o texto só é montado quando o debug está ligado, em vez de ser montado sempre e descartado.
+- Os prints dentro do `if __name__ == "__main__"` ficaram, porque só rodam quando executo o extrator direto para testar — não rodam quando a API importa.
+- Delegado ao agente pela agilidade.
+- Ao trocar por logger, a primeira versão usou `basicConfig(level=DEBUG)`, que liga o debug no logger raiz — o `pdfminer` entrou junto e a execução direta virou 13,9 MB de log do parser interno. Corrigido configurando o nível apenas no logger do próprio módulo.
+- Validei que, importado como biblioteca (o caso da API), o extrator não emite nada em stdout nem stderr, com os resultados intactos.
+
+**Código escrito à mão**
+- Este foi o primeiro trecho que escrevi sem o agente. Errei duas vezes antes de acertar: primeiro copiei o bloco do POST inteiro (que cria a transcrição do zero, quando aqui ela já existe), depois embrulhei o `correcao.value` dentro de outro dicionário, o que teria criado um `value` dentro do `value`.
 
 **Como validei**
 - Ciclo completo com os dois tipos: 202 → `processando` → `concluido` com

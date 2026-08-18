@@ -91,9 +91,13 @@ def get_transcricao(id: str):
 
 @app.put("/api/transcricoes/{id}")
 def put_transcricao(id: str, correcao: Correcao):
+    if id not in transcricoes:
+        raise HTTPException(status_code=404, detail="Transcrição não encontrada")
+    transcricoes[id]["value"] = correcao.value
     return {"id": id,
             "recebido": correcao.value
 }
+
 
 @app.get("/api/transcricoes/{id}/planilha")
 def get_planilha(id: str, formato: str = "xlsx"):

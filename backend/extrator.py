@@ -1,7 +1,10 @@
 import json
+import logging
 import re
 
 import pdfplumber
+
+logger = logging.getLogger(__name__)
 
 # "1 - DOM", "9 - FER", "31 - TER" -> comeco de um dia novo.
 PADRAO_DIA = re.compile(r"^(\d{1,2})\s*-\s*([A-Z]{3})\b")
@@ -234,12 +237,12 @@ def processar_pagina(texto_bruto):
 
 
 def processar_cartao_ponto(caminho_pdf):
-    print("iniciando a leitura do PDF...")
+    logger.debug("iniciando a leitura do PDF...")
 
     with pdfplumber.open(caminho_pdf) as pdf:
         textos = [pagina.extract_text() or "" for pagina in pdf.pages]
 
-    print(f"-> O PDF tem {len(textos)} paginas.\n")
+    logger.debug("O PDF tem %s paginas.", len(textos))
 
     paginas = []
     pages = []
@@ -252,7 +255,9 @@ def processar_cartao_ponto(caminho_pdf):
             Pagina sem tabela nao pode sumir da saida: o contrato pede uma
             entrada por pagina do PDF, vazia quando nao tem dado.
             """
-            print(f"Pagina {numero}: nao achei o cabecalho da tabela.")
+            logger.debug(
+                "Pagina %s: nao achei o cabecalho da tabela.", numero
+            )
             pages.append({"page": numero, "days": []})
             continue
 
@@ -264,33 +269,53 @@ def processar_cartao_ponto(caminho_pdf):
             d["dia"] for d in resultado["dias"] if len(d["batidas"]) % 2 != 0
         ]
 
-        print(
-            f"Pagina {numero} (mes {resultado['mes_ano']}): "
-            f"{len(resultado['dias'])} dias, "
-            f"{resultado['total_batidas']} batidas"
+        logger.debug(
+            "Pagina %s (mes %s): %s dias, %s batidas",
+            numero,
+            resultado["mes_ano"],
+            len(resultado["dias"]),
+            resultado["total_batidas"],
         )
-        print(
-            f"  cabecalho na linha {resultado['linha_cabecalho']}, "
-            f"{resultado['linhas_brutas']} linhas de tabela "
-            f"({resultado['contagem'][DIA_NOVO]} dia novo / "
-            f"{resultado['contagem'][CONTINUACAO]} continuacao / "
-            f"{resultado['contagem'][LIXO]} lixo)"
+        logger.debug(
+            "Pagina %s: cabecalho na linha %s, %s linhas de tabela "
+            "(%s dia novo / %s continuacao / %s lixo)",
+            numero,
+            resultado["linha_cabecalho"],
+            resultado["linhas_brutas"],
+            resultado["contagem"][DIA_NOVO],
+            resultado["contagem"][CONTINUACAO],
+            resultado["contagem"][LIXO],
         )
-        print(f"  dias com numero impar de batidas: {impares or 'nenhum'}")
+        logger.debug(
+            "Pagina %s: dias com numero impar de batidas: %s",
+            numero,
+            impares or "nenhum",
+        )
 
     total_dias = sum(len(p["dias"]) for p in paginas)
     total_batidas = sum(p["total_batidas"] for p in paginas)
 
-    print("\n--- Total do arquivo ---")
-    print(f"Paginas com tabela: {len(paginas)}")
-    print(f"Dias             : {total_dias}")
-    print(f"Batidas          : {total_batidas}")
+    logger.debug(
+        "Total do arquivo: %s paginas com tabela, %s dias, %s batidas",
+        len(paginas),
+        total_dias,
+        total_batidas,
+    )
 
     return {"pages": pages}
 
 
 # Teste:
 if __name__ == "__main__":
+    """
+    So na execucao direta: liga o DEBUG deste modulo pra continuar vendo o
+    passo a passo. Nao da pra usar basicConfig(level=DEBUG) porque isso liga o
+    DEBUG do logger raiz, e ai o pdfminer despeja megabytes de log do parser.
+    Rodando pela API, quem manda no nivel de log e o servidor.
+    """
+    logging.basicConfig(format="%(message)s")
+    logger.setLevel(logging.DEBUG)
+
     caminho_teste = "../exemplos/time-card-01.pdf"
     saida = processar_cartao_ponto(caminho_teste)
 
