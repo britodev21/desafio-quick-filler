@@ -1,0 +1,29 @@
+# Dependências: reinstaladas dentro da imagem, e o venv local é de outro SO.
+venv/
+env/
+**/node_modules/
+__pycache__/
+**/*.pyc
+.ruff_cache/
+
+# Build do front: o estágio Node refaz. Copiar o local mascararia um build
+# quebrado, porque a imagem sairia com o dist da máquina de quem buildou.
+frontend/dist/
+
+# Artefatos de execução
+uploads/
+planilhas/
+saidas/
+output/
+
+# Repositório e ambiente
+.git/
+.gitignore
+.env
+.env.local
+.vscode/
+.idea/
+
+# Documentos e ferramentas que a imagem não usa
+avaliacao/
+progresso-visual-desafio-quick-filler.html

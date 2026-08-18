@@ -271,3 +271,42 @@ async def criar_transcricao(
     tarefas.add_task(processar_documento, novo_id, caminho_pdf, tipo)
 
     return {"id": novo_id}
+
+
+"""
+O front buildado é servido pelo próprio FastAPI, e este bloco fica no fim do
+arquivo de propósito: o Starlette casa as rotas na ordem em que foram
+registradas, então o catch-all abaixo só é alcançado depois que /healthz e
+todas as /api já tiveram sua chance.
+
+Em desenvolvimento a pasta não existe - quem serve o front é o Vite, com
+proxy pra cá - e aí nada disso é registrado.
+"""
+DIRETORIO_FRONT = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+if DIRETORIO_FRONT.is_dir():
+
+    @app.get("/{caminho:path}")
+    def servir_front(caminho: str):
+        """
+        Devolve o arquivo estático quando ele existe e o index.html no resto,
+        que é o que uma aplicação de página única precisa pra sobreviver a um
+        F5 numa rota interna.
+        """
+        if caminho.startswith("api/"):
+            # Sem isso, /api/rota-errada devolveria o index.html com 200 e o
+            # cliente receberia HTML onde esperava JSON.
+            raise HTTPException(status_code=404, detail="Rota não encontrada")
+
+        alvo = (DIRETORIO_FRONT / caminho).resolve()
+
+        # O is_relative_to barra "../": sem ele, um caminho montado na mão
+        # leria arquivo de fora da pasta do front.
+        if (
+            caminho
+            and alvo.is_file()
+            and alvo.is_relative_to(DIRETORIO_FRONT)
+        ):
+            return FileResponse(alvo)
+
+        return FileResponse(DIRETORIO_FRONT / "index.html")

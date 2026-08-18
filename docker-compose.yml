@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    # A porta do host sai da variável PORTA, com 8000 de padrão. Dentro do
+    # contêiner é sempre 8000, que é o que o CMD do Dockerfile escuta.
+    # Defina em um .env local (que está no .gitignore) ou no ambiente:
+    #   PORTA=9000 docker compose up
+    ports:
+      - "${PORTA:-8000}:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
