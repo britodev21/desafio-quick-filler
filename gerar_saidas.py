@@ -122,24 +122,31 @@ def ler_textos_nativos(caminho_pdf):
 
 def medir_extracao(tipo, dados):
     """
-    Mede o que o extrator rendeu: (paginas com dado, total de paginas, itens).
+    Mede o que o extrator rendeu: (com dado, entradas, paginas do PDF, itens).
 
     "Itens" e batida no cartao de ponto e verba no holerite - a unidade que
-    prova que a leitura funcionou. Contar pagina nao serve: os dois extratores
-    devolvem uma entrada por pagina do PDF mesmo quando nao acharam nada.
+    prova que a leitura funcionou. Contar entrada nao serve: os dois
+    extratores devolvem uma entrada mesmo quando nao acharam nada.
+
+    Entrada e pagina nao sao a mesma coisa: um holerite pode trazer duas
+    folhas na mesma pagina, e cada folha e uma entrada. Por isso o numero de
+    paginas sai do "page" impresso, e nao do tamanho da lista - senao o resumo
+    diria "10 paginas" de um PDF que tem 5.
     """
-    paginas = dados["pages"]
+    entradas = dados["pages"]
 
     if tipo == CARTAO_PONTO:
-        com_dado = sum(1 for pagina in paginas if pagina["days"])
+        com_dado = sum(1 for entrada in entradas if entrada["days"])
         itens = sum(
-            len(dia["punches"]) for pagina in paginas for dia in pagina["days"]
+            len(dia["punches"]) for entrada in entradas for dia in entrada["days"]
         )
     else:
-        com_dado = sum(1 for pagina in paginas if pagina["fields"])
-        itens = sum(len(pagina["fields"]) for pagina in paginas)
+        com_dado = sum(1 for entrada in entradas if entrada["fields"])
+        itens = sum(len(entrada["fields"]) for entrada in entradas)
 
-    return com_dado, len(paginas), itens
+    paginas = len({entrada["page"] for entrada in entradas})
+
+    return com_dado, len(entradas), paginas, itens
 
 
 def explicar_extracao_vazia(caminho_pdf, tipo):
@@ -268,7 +275,7 @@ def processar_arquivo(caminho_pdf):
         registro["detalhe"] = traceback.format_exc().strip()
         return registro
 
-    com_dado, total_paginas, itens = medir_extracao(tipo, dados)
+    com_dado, entradas, total_paginas, itens = medir_extracao(tipo, dados)
 
     if itens == 0:
         """
@@ -283,9 +290,18 @@ def processar_arquivo(caminho_pdf):
     registro["formatos"] = gerados
 
     unidade = "batidas" if tipo == CARTAO_PONTO else "verbas"
-    resumo_dado = (
-        f"{com_dado}/{total_paginas} páginas com dado, {itens} {unidade}"
-    )
+
+    if entradas == total_paginas:
+        resumo_dado = (
+            f"{com_dado}/{total_paginas} páginas com dado, {itens} {unidade}"
+        )
+    else:
+        # Mais entradas que paginas: o documento traz mais de uma folha por
+        # pagina, e dizer "paginas" aqui contaria errado o PDF.
+        resumo_dado = (
+            f"{com_dado}/{entradas} folhas com dado em {total_paginas} "
+            f"páginas, {itens} {unidade}"
+        )
 
     if erros:
         registro["motivo"] = "falha ao gravar: " + "; ".join(erros)
@@ -306,14 +322,14 @@ def processar_arquivo(caminho_pdf):
     else:
         registro["detalhe"] = resumo_dado
 
-    if com_dado < total_paginas:
+    if com_dado < entradas:
         """
-        Pagina vazia dentro de um arquivo que funcionou nao invalida a
+        Entrada vazia dentro de um arquivo que funcionou nao invalida a
         planilha, mas precisa aparecer: pode ser pagina de rosto e pode ser
         dado perdido, e so quem olha o PDF sabe qual dos dois.
         """
         registro["detalhe"] += (
-            f" - atenção: {total_paginas - com_dado} página(s) sem dado"
+            f" - atenção: {entradas - com_dado} sem dado"
         )
 
     return registro
