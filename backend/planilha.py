@@ -1,4 +1,7 @@
+import csv
+import json
 import logging
+from collections import namedtuple
 from datetime import datetime
 
 from openpyxl import Workbook
@@ -19,6 +22,15 @@ BORDA_VERMELHA = Border(left=Side(style="medium", color=COR_BORDA_VERMELHA))
 
 LARGURA_MINIMA = 12
 LARGURA_MAXIMA = 30
+
+"""
+Forma intermediaria que o xlsx e o CSV consomem igual. Existir uma so
+garante por construcao que os dois saem com as mesmas colunas, na mesma
+ordem e com as mesmas linhas - em vez de ser coincidencia de dois codigos
+parecidos que podem divergir depois. Os avisos so o xlsx usa, porque CSV
+nao tem formatacao.
+"""
+Tabela = namedtuple("Tabela", "cabecalho linhas avisos")
 
 
 # ---------------------------------------------------------------------------
@@ -166,40 +178,31 @@ def derivar_avisos_cartao_ponto(linhas):
     return avisos
 
 
+def tabela_cartao_ponto(dados):
+    """
+    Monta a tabela do cartao de ponto: uma linha por dia, uma coluna Data mais
+    os pares Entrada/Saida.
+    """
+    dias = linhas_do_cartao_ponto(dados)
+    cabecalho = montar_cabecalho_cartao_ponto(contar_pares(dias))
+    avisos = derivar_avisos_cartao_ponto(dias)
+
+    linhas = [
+        [dia["date_raw"]] + [punch["time_hhmm"] for punch in dia["punches"]]
+        for dia in dias
+    ]
+
+    return Tabela(cabecalho, linhas, avisos)
+
+
 def gerar_planilha_cartao_ponto(dados, caminho_saida):
-    """
-    Escreve o xlsx do cartao de ponto e devolve o caminho.
-
-    Uma linha por dia, uma coluna Data mais os pares Entrada/Saida.
-    """
-    linhas = linhas_do_cartao_ponto(dados)
-    cabecalho = montar_cabecalho_cartao_ponto(contar_pares(linhas))
-    avisos = derivar_avisos_cartao_ponto(linhas)
-
-    planilha = Workbook()
-    aba = planilha.active
-    aba.title = "Cartão de ponto"
-
-    escrever_cabecalho(aba, cabecalho)
-
-    for numero_linha, (linha, aviso) in enumerate(zip(linhas, avisos), start=2):
-        valores = [linha["date_raw"]]
-        valores += [punch["time_hhmm"] for punch in linha["punches"]]
-
-        escrever_linha(aba, numero_linha, valores, len(cabecalho), aviso)
-
-    aba.freeze_panes = "A2"
-    ajustar_larguras(aba, cabecalho)
-    planilha.save(caminho_saida)
-
-    logger.debug(
-        "planilha de cartao de ponto: %s linhas, %s colunas, %s destaques",
-        len(linhas),
-        len(cabecalho),
-        sum(1 for a in avisos if a["amarelo"] or a["nao_sequencial"]),
+    return escrever_xlsx(
+        tabela_cartao_ponto(dados), "Cartão de ponto", caminho_saida, "A2"
     )
 
-    return caminho_saida
+
+def gerar_csv_cartao_ponto(dados, caminho_saida):
+    return escrever_csv(tabela_cartao_ponto(dados), caminho_saida)
 
 
 # ---------------------------------------------------------------------------
@@ -302,50 +305,143 @@ def derivar_avisos_holerite(paginas):
     return avisos
 
 
-def gerar_planilha_holerite(dados, caminho_saida):
+def tabela_holerite(dados):
     """
-    Escreve o xlsx do holerite e devolve o caminho.
+    Monta a tabela do holerite: uma linha por pagina, colunas fixas Pag./Mes/
+    Ano e depois uma coluna por verba distinta.
 
-    O documento e uma lista vertical de verbas por pagina; a planilha e uma
-    matriz larga, uma linha por pagina e uma coluna por verba distinta. Essa
-    transposicao e o trabalho.
+    O documento e uma lista vertical de verbas por pagina; a tabela e uma
+    matriz larga. Essa transposicao e o trabalho.
     """
     paginas = dados["pages"]
     verbas = colunas_de_verbas(dados)
     cabecalho = ["Pág.", "Mês", "Ano"] + verbas
     avisos = derivar_avisos_holerite(paginas)
 
-    planilha = Workbook()
-    aba = planilha.active
-    aba.title = "Holerite"
+    linhas = []
 
-    escrever_cabecalho(aba, cabecalho)
-
-    for numero_linha, (pagina, aviso) in enumerate(zip(paginas, avisos), start=2):
+    for pagina in paginas:
         valores_da_pagina = valores_por_verba(pagina)
 
         """
         Mes e Ano ficam string, como vieram do contrato: virar numero comeria
-        o zero a esquerda de "01" e a planilha mostraria 1.
+        o zero a esquerda de "01" e a saida mostraria 1.
         """
-        valores = [pagina["page"], pagina["month"], pagina["year"]]
+        linha = [pagina["page"], pagina["month"], pagina["year"]]
 
         # None deixa a celula em branco de verdade quando a verba nao aparece
         # nesta pagina; "" criaria uma string vazia.
-        valores += [valores_da_pagina.get(verba) for verba in verbas]
+        linha += [valores_da_pagina.get(verba) for verba in verbas]
 
-        escrever_linha(aba, numero_linha, valores, len(cabecalho), aviso)
+        linhas.append(linha)
 
-    aba.freeze_panes = "D2"
-    ajustar_larguras(aba, cabecalho)
+    return Tabela(cabecalho, linhas, avisos)
+
+
+def gerar_planilha_holerite(dados, caminho_saida):
+    return escrever_xlsx(tabela_holerite(dados), "Holerite", caminho_saida, "D2")
+
+
+def gerar_csv_holerite(dados, caminho_saida):
+    return escrever_csv(tabela_holerite(dados), caminho_saida)
+
+
+# ---------------------------------------------------------------------------
+# Escrita dos formatos
+# ---------------------------------------------------------------------------
+
+
+def escrever_xlsx(tabela, titulo_aba, caminho_saida, congelar):
+    planilha = Workbook()
+    aba = planilha.active
+    aba.title = titulo_aba
+
+    escrever_cabecalho(aba, tabela.cabecalho)
+
+    for numero_linha, (valores, aviso) in enumerate(
+        zip(tabela.linhas, tabela.avisos), start=2
+    ):
+        escrever_linha(aba, numero_linha, valores, len(tabela.cabecalho), aviso)
+
+    aba.freeze_panes = congelar
+    ajustar_larguras(aba, tabela.cabecalho)
     planilha.save(caminho_saida)
 
     logger.debug(
-        "planilha de holerite: %s linhas, %s colunas (%s verbas), %s destaques",
-        len(paginas),
-        len(cabecalho),
-        len(verbas),
-        sum(1 for a in avisos if a["amarelo"] or a["nao_sequencial"]),
+        "xlsx %s: %s linhas, %s colunas, %s destaques",
+        caminho_saida,
+        len(tabela.linhas),
+        len(tabela.cabecalho),
+        sum(1 for a in tabela.avisos if a["amarelo"] or a["nao_sequencial"]),
     )
 
     return caminho_saida
+
+
+def escrever_csv(tabela, caminho_saida):
+    """
+    Escreve os mesmos dados do xlsx - mesmas colunas, mesma ordem, mesmas
+    linhas -, sem os destaques, porque CSV nao tem formatacao.
+
+    Separador ";" e nao ",": o decimal brasileiro ja usa virgula, entao com
+    "," todo valor sairia entre aspas. E o Excel em portugues espera ";" como
+    separador de lista, senao joga a linha inteira na primeira coluna.
+
+    utf-8-sig grava o BOM na frente do arquivo: sem ele o Excel abre o CSV no
+    encoding do sistema e a acentuacao sai trocada.
+
+    newline vazio e exigencia do modulo csv, que ja escreve a quebra de linha
+    sozinho; sem isso o Windows dobra a quebra e sai uma linha em branco entre
+    cada duas.
+    """
+    with open(caminho_saida, "w", encoding="utf-8-sig", newline="") as arquivo:
+        escritor = csv.writer(arquivo, delimiter=";")
+        escritor.writerow(tabela.cabecalho)
+
+        for valores in tabela.linhas:
+            # Completa a largura igual o xlsx faz: linha curta vira celula
+            # vazia no fim, nao coluna faltando.
+            faltam = len(tabela.cabecalho) - len(valores)
+            escritor.writerow(list(valores) + [None] * faltam)
+
+    logger.debug(
+        "csv %s: %s linhas, %s colunas",
+        caminho_saida,
+        len(tabela.linhas),
+        len(tabela.cabecalho),
+    )
+
+    return caminho_saida
+
+
+def gerar_json(dados, caminho_saida):
+    """
+    Grava o proprio value da transcricao, sem transformacao nenhuma.
+
+    Serve pros dois tipos de documento: o que sai e exatamente o que entrou.
+    ensure_ascii=False mantem os acentos legiveis em vez de virar escape
+    unicode.
+    """
+    with open(caminho_saida, "w", encoding="utf-8") as arquivo:
+        json.dump(dados, arquivo, indent=2, ensure_ascii=False)
+
+    return caminho_saida
+
+
+"""
+Escolha do gerador por (tipo, formato). As tres funcoes de cada tipo tem a
+mesma assinatura (dados, caminho_saida), entao a rota de download so procura
+aqui e chama, sem um if por formato.
+"""
+GERADORES = {
+    "cartao-ponto": {
+        "xlsx": gerar_planilha_cartao_ponto,
+        "csv": gerar_csv_cartao_ponto,
+        "json": gerar_json,
+    },
+    "holerite": {
+        "xlsx": gerar_planilha_holerite,
+        "csv": gerar_csv_holerite,
+        "json": gerar_json,
+    },
+}
