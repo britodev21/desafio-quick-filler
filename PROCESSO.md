@@ -572,6 +572,16 @@
   o mesmo dado e compara colunas, células e destaques.
 - Sem ele, a tela poderia mostrar uma coisa e o arquivo baixado outra.
 
+**Rodar o OCR localmente**
+- No Windows, o `pip install pytesseract` instala só o wrapper. O binário do
+  Tesseract é instalador separado, e o instalador não conseguiu escrever o
+  `por.traineddata` em Program Files por falta de permissão, deixando o arquivo
+  em `%LOCALAPPDATA%`.
+- Resultado: o Tesseract subia mas não achava o idioma português, e a
+  transcrição falhava com "Could not initialize tesseract".
+- No Docker nada disso acontece: o Dockerfile instala `tesseract-ocr` e
+  `tesseract-ocr-por` via apt, e o módulo funciona sem configuração.
+
 ## Cite 3 decisões em que havia mais de uma resposta razoável. Por que escolheu essa?
 
 ## O que na sua solução quebra primeiro em produção?
